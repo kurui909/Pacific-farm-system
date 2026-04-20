@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/Pacific-farm-system/static/css/main.8256e66a.css",
+    "main.js": "/Pacific-farm-system/static/js/main.a0e408b0.js",
+    "index.html": "/Pacific-farm-system/index.html",
+    "main.8256e66a.css.map": "/Pacific-farm-system/static/css/main.8256e66a.css.map",
+    "main.a0e408b0.js.map": "/Pacific-farm-system/static/js/main.a0e408b0.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.8256e66a.css",
+    "static/js/main.a0e408b0.js"
+  ]
+}
