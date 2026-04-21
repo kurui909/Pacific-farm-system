@@ -1,303 +1,487 @@
-// src/components/tables/PenTable.jsx
-import { motion } from 'framer-motion';
-import {
-  Edit, Trash2, Activity, Thermometer, Droplet, Wind,
-  TrendingUp, AlertTriangle, Eye, Skull
-} from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Edit, Trash2, Activity, Eye, ChevronUp, ChevronDown, AlertTriangle, CheckCircle, AlertCircle, Flame, Wind, Droplets, Users, TrendingUp, BarChart3, Heart, SkipBack, Thermometer, Zap, CloudRain } from 'lucide-react';
 
-const getStatusBadge = (status) => {
-  const styles = {
-    active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-    inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-    maintenance: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-  };
-  return styles[status] || styles.inactive;
-};
-
-const getHousingIcon = (system) => {
-  if (system === 'deep_litter') return '🏠';
-  if (system === 'cage') return '🔲';
-  return '❓';
-};
-
-const getAlertIcon = (pen, env, latestProd) => {
-  const birds = latestProd?.closing_stock ?? pen.current_birds ?? 0;
-  const densityAlert = (birds / (pen.floor_area_sq_m || 1)) > (pen.max_density || 15);
-  const tempAlert = env?.temperature > 32;
-  const ammoniaAlert = env?.ammonia > 25;
-  const highMortality = (pen.mortality_last_7d || 0) > (birds * 0.05);
-  if (densityAlert || tempAlert || ammoniaAlert || highMortality) return <AlertTriangle className="h-4 w-4 text-red-500" />;
-  return null;
-};
-
-// Table row component
-const PenRow = ({ pen, latestProd, env, onEdit, onDelete, onLogMortality, onViewEnvironment }) => {
-  const currentBirds = latestProd?.closing_stock ?? pen.current_birds ?? 0;
-  const occupancy = pen.capacity ? Math.round((currentBirds / pen.capacity) * 100) : 0;
-  const alertIcon = getAlertIcon(pen, env, latestProd);
-
-  return (
-    <motion.tr
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-    >
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{getHousingIcon(pen.housing_system)}</span>
-          <span className="font-medium text-gray-900 dark:text-white">{pen.name}</span>
-          {alertIcon && <span className="ml-1">{alertIcon}</span>}
-        </div>
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-        {pen.breed || '—'}
-      </td>
-      <td className="px-4 py-3 text-sm">
-        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusBadge(pen.status)}`}>
-          {pen.status}
-        </span>
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-        {pen.capacity?.toLocaleString() || '—'}
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-        <div className="flex items-center gap-1">
-          <span>{currentBirds?.toLocaleString() || 0}</span>
-          <span className="text-xs text-gray-400">({occupancy}%)</span>
-        </div>
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1" title="Temperature">
-            <Thermometer size={12} />
-            <span>{env?.temperature ?? '—'}°C</span>
-          </div>
-          <div className="flex items-center gap-1" title="Humidity">
-            <Droplet size={12} />
-            <span>{env?.humidity ?? '—'}%</span>
-          </div>
-          <div className="flex items-center gap-1" title="Ammonia">
-            <Wind size={12} />
-            <span>{env?.ammonia ?? '—'}ppm</span>
-          </div>
-        </div>
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-        {pen.mortality_last_7d || 0}
-      </td>
-      <td className="px-4 py-3 text-right">
-        <div className="flex justify-end gap-1">
-          <button
-            onClick={() => onViewEnvironment(pen.id)}
-            className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-            title="View environment"
-          >
-            <Eye size={16} />
-          </button>
-          <button
-            onClick={() => onLogMortality(pen.id)}
-            className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
-            title="Record mortality"
-          >
-            <Skull size={16} />
-          </button>
-          <button
-            onClick={() => onEdit(pen)}
-            className="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            title="Edit pen"
-          >
-            <Edit size={16} />
-          </button>
-          <button
-            onClick={() => onDelete(pen.id)}
-            className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-            title="Delete pen"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
-      </td>
-    </motion.tr>
-  );
-};
-
-// Card view component
-const PenCard = ({ pen, latestProd, env, onEdit, onDelete, onLogMortality, onViewEnvironment }) => {
-  const currentBirds = latestProd?.closing_stock ?? pen.current_birds ?? 0;
-  const occupancy = pen.capacity ? Math.round((currentBirds / pen.capacity) * 100) : 0;
-  const alertIcon = getAlertIcon(pen, env, latestProd);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm hover:shadow-md transition-shadow"
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">{getHousingIcon(pen.housing_system)}</span>
-          <div>
-            <h3 className="font-semibold text-gray-900 dark:text-white">{pen.name}</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{pen.breed || 'No breed'}</p>
-          </div>
-          {alertIcon && <span>{alertIcon}</span>}
-        </div>
-        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusBadge(pen.status)}`}>
-          {pen.status}
-        </span>
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-        <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Capacity</p>
-          <p className="font-medium">{pen.capacity?.toLocaleString() || '—'}</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Current birds</p>
-          <p className="font-medium">{currentBirds?.toLocaleString() || 0} ({occupancy}%)</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Mortality (7d)</p>
-          <p className="font-medium">{pen.mortality_last_7d || 0}</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Environment</p>
-          <p className="font-medium text-xs">
-            {env?.temperature ?? '—'}°C / {env?.humidity ?? '—'}% / {env?.ammonia ?? '—'}ppm
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4 flex justify-end gap-2 border-t border-gray-100 dark:border-gray-700 pt-3">
-        <button
-          onClick={() => onViewEnvironment(pen.id)}
-          className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-          title="Environment"
-        >
-          <Eye size={16} />
-        </button>
-        <button
-          onClick={() => onLogMortality(pen.id)}
-          className="rounded-lg p-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-          title="Mortality"
-        >
-          <Skull size={16} />
-        </button>
-        <button
-          onClick={() => onEdit(pen)}
-          className="rounded-lg p-1.5 text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
-          title="Edit"
-        >
-          <Edit size={16} />
-        </button>
-        <button
-          onClick={() => onDelete(pen.id)}
-          className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-          title="Delete"
-        >
-          <Trash2 size={16} />
-        </button>
-      </div>
-    </motion.div>
-  );
-};
-
-// Main component
 const PenTable = ({
   pens,
-  viewMode = 'table',
-  latestProduction = {},
-  realTimeEnv = {},
+  viewMode,
+  latestProduction,
+  realTimeEnv,
+  blocks,
   onEdit,
   onDelete,
   onLogMortality,
   onViewEnvironment,
-  isLoading = false,
+  isLoading
 }) => {
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
+  // Helper functions
+  const getBlockName = (blockId) => blocks?.find(b => b.id === blockId)?.name || 'Unknown';
+
+  const getCurrentBirds = (penId) => {
+    const production = latestProduction?.find(p => p.pen_id === penId);
+    return production?.current_birds || 0;
+  };
+
+  const getMortality = (penId) => {
+    if (!Array.isArray(latestProduction)) return 0;
+    return latestProduction.find(p => p.pen_id === penId)?.mortality_last_7d || 0;
+  };
+
+  const getTemperature = (penId) => {
+    if (!Array.isArray(realTimeEnv)) return null;
+    return realTimeEnv.find(e => e.pen_id === penId)?.temperature || null;
+  };
+
+  const getAmmonia = (penId) => {
+    if (!Array.isArray(realTimeEnv)) return null;
+    return realTimeEnv.find(e => e.pen_id === penId)?.ammonia || null;
+  };
+
+  const getHumidity = (penId) => {
+    if (!Array.isArray(realTimeEnv)) return null;
+    return realTimeEnv.find(e => e.pen_id === penId)?.humidity || null;
+  };
+
+  // Status helpers with logical icons
+  const getTemperatureStatus = (temp) => {
+    if (temp === null) return { color: 'bg-gray-100 dark:bg-gray-700 text-gray-600', icon: AlertCircle, label: 'N/A', severity: 0 };
+    if (temp > 35) return { color: 'bg-red-100 dark:bg-red-900/30 text-red-600', icon: Flame, label: `${temp}°C`, severity: 3 };
+    if (temp > 30) return { color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600', icon: Thermometer, label: `${temp}°C`, severity: 2 };
+    if (temp < 15) return { color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600', icon: AlertCircle, label: `${temp}°C`, severity: 1 };
+    return { color: 'bg-green-100 dark:bg-green-900/30 text-green-600', icon: CheckCircle, label: `${temp}°C`, severity: 0 };
+  };
+
+  const getAmmoniaStatus = (ammonia) => {
+    if (ammonia === null) return { color: 'bg-gray-100 dark:bg-gray-700 text-gray-600', icon: AlertCircle, label: 'N/A', severity: 0 };
+    if (ammonia > 30) return { color: 'bg-red-100 dark:bg-red-900/30 text-red-600', icon: AlertTriangle, label: `${ammonia} ppm`, severity: 3 };
+    if (ammonia > 20) return { color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600', icon: Wind, label: `${ammonia} ppm`, severity: 2 };
+    return { color: 'bg-green-100 dark:bg-green-900/30 text-green-600', icon: CheckCircle, label: `${ammonia} ppm`, severity: 0 };
+  };
+
+  const getHumidityStatus = (humidity) => {
+    if (humidity === null) return { color: 'bg-gray-100 dark:bg-gray-700 text-gray-600', icon: AlertCircle, label: 'N/A', severity: 0 };
+    if (humidity > 80) return { color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600', icon: CloudRain, label: `${humidity}%`, severity: 1 };
+    if (humidity < 40) return { color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600', icon: AlertCircle, label: `${humidity}%`, severity: 1 };
+    return { color: 'bg-green-100 dark:bg-green-900/30 text-green-600', icon: CheckCircle, label: `${humidity}%`, severity: 0 };
+  };
+
+  const getOccupancyStatus = (occupancy) => {
+    if (occupancy > 100) return { color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/20', icon: AlertTriangle, label: 'Over' };
+    if (occupancy > 90) return { color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/20', icon: AlertCircle, label: 'High' };
+    if (occupancy > 70) return { color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/20', icon: CheckCircle, label: 'Good' };
+    return { color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/20', icon: AlertCircle, label: 'Low' };
+  };
+
+  const getMortalityStatus = (mortality) => {
+    if (mortality > 10) return { color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/20', icon: AlertTriangle, severity: 3 };
+    if (mortality > 5) return { color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/20', icon: AlertCircle, severity: 2 };
+    if (mortality > 0) return { color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/20', icon: Activity, severity: 1 };
+    return { color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/20', icon: Heart, severity: 0 };
+  };
+
+  // Sorting logic with real data
+  const sortedPens = useMemo(() => {
+    if (!sortConfig.key) return pens;
+
+    return [...pens].sort((a, b) => {
+      let aValue, bValue;
+
+      switch (sortConfig.key) {
+        case 'name':
+          aValue = a.name || '';
+          bValue = b.name || '';
+          break;
+        case 'block':
+          aValue = a.block || '';
+          bValue = b.block || '';
+          break;
+        case 'capacity':
+          aValue = a.capacity || 0;
+          bValue = b.capacity || 0;
+          break;
+        case 'currentBirds':
+          // Get real bird count from latestProduction
+          aValue = latestProduction?.find(p => p.pen_id === a.id)?.current_birds || 0;
+          bValue = latestProduction?.find(p => p.pen_id === b.id)?.current_birds || 0;
+          break;
+        case 'occupancy':
+          // Calculate real occupancy percentage
+          const aBirds = latestProduction?.find(p => p.pen_id === a.id)?.current_birds || 0;
+          const bBirds = latestProduction?.find(p => p.pen_id === b.id)?.current_birds || 0;
+          aValue = a.capacity ? (aBirds / a.capacity) * 100 : 0;
+          bValue = b.capacity ? (bBirds / b.capacity) * 100 : 0;
+          break;
+        case 'mortality':
+          // Get real mortality data
+          aValue = latestProduction?.find(p => p.pen_id === a.id)?.mortality_last_7d || 0;
+          bValue = latestProduction?.find(p => p.pen_id === b.id)?.mortality_last_7d || 0;
+          break;
+        case 'temperature':
+          // Get real temperature from realTimeEnv
+          aValue = realTimeEnv?.find(env => env.pen_id === a.id)?.temperature || -Infinity;
+          bValue = realTimeEnv?.find(env => env.pen_id === b.id)?.temperature || -Infinity;
+          break;
+        default:
+          return 0;
+      }
+
+      // Handle string sorting
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [pens, sortConfig, latestProduction, realTimeEnv]);
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const SortIcon = ({ columnKey }) => {
+    if (sortConfig.key !== columnKey) return null;
+    return sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
+  };
+
+  const SkeletonRow = () => (
+    <tr className="animate-pulse">
+      <td className="px-3 py-3 sm:px-6"><div className="h-4 bg-gray-300 dark:bg-gray-600 rounded"></div></td>
+      <td className="px-3 py-3 sm:px-6"><div className="h-4 bg-gray-300 dark:bg-gray-600 rounded"></div></td>
+      <td className="px-3 py-3 sm:px-6"><div className="h-4 bg-gray-300 dark:bg-gray-600 rounded"></div></td>
+      <td className="px-3 py-3 sm:px-6"><div className="h-4 bg-gray-300 dark:bg-gray-600 rounded"></div></td>
+      <td className="px-3 py-3 sm:px-6"><div className="h-4 bg-gray-300 dark:bg-gray-600 rounded"></div></td>
+      <td className="px-3 py-3 sm:px-6"><div className="h-4 bg-gray-300 dark:bg-gray-600 rounded"></div></td>
+      <td className="px-3 py-3 sm:px-6"><div className="h-4 bg-gray-300 dark:bg-gray-600 rounded"></div></td>
+      <td className="px-3 py-3 sm:px-6"><div className="h-4 bg-gray-300 dark:bg-gray-600 rounded"></div></td>
+      <td className="px-3 py-3 sm:px-6"><div className="h-4 bg-gray-300 dark:bg-gray-600 rounded flex gap-1"></div></td>
+    </tr>
+  );
+
   if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+      <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+        <table className="min-w-full">
+          <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-b-2 border-gray-200 dark:border-gray-700">
+            <tr>
+              <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">🏠 Pen</th>
+              <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">📍 Block</th>
+              <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">👥 Closing Stock</th>
+              <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">📊 Occupancy</th>
+              <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">❤️ Mortality</th>
+              <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">🌡️ Temp</th>
+              <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">💨 Ammonia</th>
+              <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">🏠 Housing</th>
+              <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">⚙️ Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)}
+          </tbody>
+        </table>
       </div>
     );
   }
 
-  if (!pens || pens.length === 0) {
+  if (!sortedPens || sortedPens.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-12 text-center dark:border-gray-600 dark:bg-gray-800/30">
-        <Activity className="mx-auto mb-3 h-10 w-10 text-gray-400" />
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white">No pens found</h3>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Create your first pen to see it here.
-        </p>
+      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+        <SkipBack size={48} className="mx-auto mb-4 opacity-50" />
+        <p className="text-lg">No pens found</p>
+        <p className="text-sm mt-2">Try adjusting your filters or add a new pen</p>
       </div>
     );
   }
 
   if (viewMode === 'cards') {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {pens.map((pen) => (
-          <PenCard
-            key={pen.id}
-            pen={pen}
-            latestProd={latestProduction[pen.id]}
-            env={realTimeEnv[pen.id]}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onLogMortality={onLogMortality}
-            onViewEnvironment={onViewEnvironment}
-          />
-        ))}
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 sm:gap-3">
+        {sortedPens.map(pen => {
+          const currentBirds = getCurrentBirds(pen.id);
+          const mortality = getMortality(pen.id);
+          const temp = getTemperature(pen.id);
+          const ammonia = getAmmonia(pen.id);
+          const humidity = getHumidity(pen.id);
+          const occupancy = pen.capacity ? ((currentBirds / pen.capacity) * 100).toFixed(1) : 0;
+          const tempStatus = getTemperatureStatus(temp);
+          const ammoniaStatus = getAmmoniaStatus(ammonia);
+          const humidityStatus = getHumidityStatus(humidity);
+          const occupancyStatus = getOccupancyStatus(occupancy);
+          const mortalityStatus = getMortalityStatus(mortality);
+
+          return (
+            <div key={pen.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border border-gray-200 dark:border-gray-700 overflow-hidden w-full">
+              {/* Header - Very Compact */}
+              <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-1.5 text-white">
+                <h3 className="text-xs font-bold truncate">{pen.name}</h3>
+                <p className="text-xs opacity-90 truncate">📍 {getBlockName(pen.block_id)}</p>
+              </div>
+
+              {/* Content - Ultra Compact */}
+              <div className="p-2 space-y-1.5">
+                {/* Birds Info - Compact */}
+                <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded p-1.5 border border-green-200 dark:border-green-700">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                      <Users size={10} /> Stock
+                    </span>
+                    <span className="text-xs font-bold text-green-600">{currentBirds}</span>
+                  </div>
+                  <div className="w-full bg-green-200 dark:bg-green-900/30 rounded-full h-1">
+                    <div
+                      className="bg-green-600 h-1 rounded-full transition-all"
+                      style={{ width: `${Math.min(occupancy, 100)}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                    <span>{occupancy}%</span>
+                    <span className={occupancyStatus.color}>{occupancyStatus.label}</span>
+                  </div>
+                </div>
+
+                {/* Mortality - Compact */}
+                <div className={`${mortalityStatus.bg} rounded p-1.5 border border-gray-200 dark:border-gray-600`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                      <mortalityStatus.icon size={10} className={mortalityStatus.color} /> Mort
+                    </span>
+                    <span className={`font-bold text-xs ${mortalityStatus.color}`}>{mortality}</span>
+                  </div>
+                </div>
+
+                {/* Environment - Compact */}
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">🌡️ Env</p>
+                  
+                  {/* Temperature */}
+                  <div className={`${tempStatus.color} rounded p-1 border border-gray-200 dark:border-gray-600 flex items-center justify-between`}>
+                    <div className="flex items-center gap-1">
+                      <tempStatus.icon size={10} />
+                      <span className="text-xs font-medium">Temp</span>
+                    </div>
+                    <span className="font-bold text-xs">{tempStatus.label}</span>
+                  </div>
+
+                  {/* Ammonia */}
+                  <div className={`${ammoniaStatus.color} rounded p-1 border border-gray-200 dark:border-gray-600 flex items-center justify-between`}>
+                    <div className="flex items-center gap-1">
+                      <ammoniaStatus.icon size={10} />
+                      <span className="text-xs font-medium">Ammonia</span>
+                    </div>
+                    <span className="font-bold text-xs">{ammoniaStatus.label}</span>
+                  </div>
+                </div>
+
+                {/* Type - Compact */}
+                <div className="bg-gray-50 dark:bg-gray-700 rounded p-1.5">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">🏠 Type</p>
+                  <p className="font-semibold text-gray-900 dark:text-white text-xs">{pen.housing_system}</p>
+                </div>
+              </div>
+
+              {/* Actions - Ultra Compact */}
+              <div className="border-t border-gray-200 dark:border-gray-700 p-1.5 flex gap-1 bg-gray-50 dark:bg-gray-700/50">
+                <button
+                  onClick={() => onViewEnvironment(pen)}
+                  className="flex-1 p-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                  title="View Environment"
+                >
+                  <Eye size={10} />
+                </button>
+                <button
+                  onClick={() => onLogMortality(pen)}
+                  className="flex-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                  title="Log Mortality"
+                >
+                  <Activity size={10} />
+                </button>
+                <button
+                  onClick={() => onEdit(pen)}
+                  className="flex-1 p-1 bg-amber-600 hover:bg-amber-700 text-white rounded transition-colors"
+                  title="Edit"
+                >
+                  <Edit size={10} />
+                </button>
+                <button
+                  onClick={() => onDelete(pen)}
+                  className="flex-1 p-1 bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
+                  title="Delete"
+                >
+                  <Trash2 size={10} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   }
 
-  // Table view (default)
+  // Table view
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-gray-50 dark:bg-gray-800/50">
+    <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+      <table className="min-w-full">
+        <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-b-2 border-gray-200 dark:border-gray-700">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Pen
+            <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" onClick={() => handleSort('name')}>
+              <div className="flex items-center gap-1 sm:gap-2">
+                🏠 Pen <SortIcon columnKey="name" />
+              </div>
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Breed
+            <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" onClick={() => handleSort('block')}>
+              <div className="flex items-center gap-1 sm:gap-2">
+                📍 Block <SortIcon columnKey="block" />
+              </div>
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Status
+            <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" onClick={() => handleSort('currentBirds')}>
+              <div className="flex items-center gap-1 sm:gap-2">
+                👥 Closing Stock <SortIcon columnKey="currentBirds" />
+              </div>
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Capacity
+            <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" onClick={() => handleSort('occupancy')}>
+              <div className="flex items-center gap-1 sm:gap-2">
+                📊 Occupancy <SortIcon columnKey="occupancy" />
+              </div>
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Current Birds
+            <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" onClick={() => handleSort('mortality')}>
+              <div className="flex items-center gap-1 sm:gap-2">
+                ❤️ Mortality <SortIcon columnKey="mortality" />
+              </div>
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Environment
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Mortality (7d)
-            </th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Actions
-            </th>
+            <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">🌡️ Temperature</th>
+            <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">💨 Ammonia</th>
+            <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">🏠 Housing</th>
+            <th className="px-3 py-3 sm:px-6 text-left font-bold text-gray-900 dark:text-white">⚙️ Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
-          {pens.map((pen) => (
-            <PenRow
-              key={pen.id}
-              pen={pen}
-              latestProd={latestProduction[pen.id]}
-              env={realTimeEnv[pen.id]}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onLogMortality={onLogMortality}
-              onViewEnvironment={onViewEnvironment}
-            />
-          ))}
+        <tbody>
+          {sortedPens.map((pen, idx) => {
+            const currentBirds = getCurrentBirds(pen.id);
+            const mortality = getMortality(pen.id);
+            const temp = getTemperature(pen.id);
+            const ammonia = getAmmonia(pen.id);
+            const humidity = getHumidity(pen.id);
+            const occupancy = pen.capacity ? ((currentBirds / pen.capacity) * 100).toFixed(1) : 0;
+            const tempStatus = getTemperatureStatus(temp);
+            const ammoniaStatus = getAmmoniaStatus(ammonia);
+            const humidityStatus = getHumidityStatus(humidity);
+            const occupancyStatus = getOccupancyStatus(occupancy);
+            const mortalityStatus = getMortalityStatus(mortality);
+
+            return (
+              <tr
+                key={pen.id}
+                className={`border-b border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700/50 transition-colors ${
+                  idx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-750'
+                }`}
+              >
+                {/* Pen Name */}
+                <td className="px-3 py-3 sm:px-6">
+                  <div className="font-bold text-gray-900 dark:text-white text-sm sm:text-base">{pen.name}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">{pen.status}</div>
+                </td>
+
+                {/* Block */}
+                <td className="px-3 py-3 sm:px-6 text-gray-700 dark:text-gray-300 text-sm sm:text-base">{getBlockName(pen.block_id)}</td>
+
+                {/* Birds */}
+                <td className="px-3 py-3 sm:px-6">
+                  <div className="flex items-center gap-2">
+                    <Users size={16} className="text-green-600" />
+                    <span className="font-bold text-gray-900 dark:text-white text-sm sm:text-base">{currentBirds}/{pen.capacity}</span>
+                  </div>
+                </td>
+
+                {/* Occupancy */}
+                <td className="px-3 py-3 sm:px-6">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="flex-1 min-w-[60px] sm:min-w-[80px]">
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            occupancy > 100 ? 'bg-red-600' : occupancy > 90 ? 'bg-orange-600' : 'bg-green-600'
+                          }`}
+                          style={{ width: `${Math.min(occupancy, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <span className={`font-bold w-10 sm:w-12 text-right text-xs sm:text-sm ${occupancyStatus.color}`}>{occupancy}%</span>
+                  </div>
+                </td>
+
+                {/* Mortality */}
+                <td className="px-3 py-3 sm:px-6">
+                  <div className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-full ${mortalityStatus.bg}`}>
+                    <mortalityStatus.icon size={14} className="sm:w-4 sm:h-4" />
+                    <span className={`font-bold text-xs sm:text-sm ${mortalityStatus.color}`}>{mortality}</span>
+                  </div>
+                </td>
+
+                {/* Temperature */}
+                <td className="px-3 py-3 sm:px-6">
+                  <div className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-2 rounded-lg ${tempStatus.color}`}>
+                    <tempStatus.icon size={14} className="sm:w-4 sm:h-4" />
+                    <span className="font-semibold text-xs sm:text-sm">{tempStatus.label}</span>
+                  </div>
+                </td>
+
+                {/* Ammonia */}
+                <td className="px-3 py-3 sm:px-6">
+                  <div className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-2 rounded-lg ${ammoniaStatus.color}`}>
+                    <ammoniaStatus.icon size={14} className="sm:w-4 sm:h-4" />
+                    <span className="font-semibold text-xs sm:text-sm">{ammoniaStatus.label}</span>
+                  </div>
+                </td>
+
+                {/* Housing */}
+                <td className="px-3 py-3 sm:px-6">
+                  <span className="px-2 sm:px-3 py-1 bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-full text-xs sm:text-sm font-medium">
+                    {pen.housing_system}
+                  </span>
+                </td>
+
+                {/* Actions */}
+                <td className="px-3 py-3 sm:px-6">
+                  <div className="flex gap-1 sm:gap-2">
+                    <button
+                      onClick={() => onViewEnvironment(pen)}
+                      className="p-1 sm:p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                      title="View Environment"
+                    >
+                      <Eye size={14} className="sm:w-4 sm:h-4" />
+                    </button>
+                    <button
+                      onClick={() => onLogMortality(pen)}
+                      className="p-1 sm:p-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                      title="Log Mortality"
+                    >
+                      <Activity size={14} className="sm:w-4 sm:h-4" />
+                    </button>
+                    <button
+                      onClick={() => onEdit(pen)}
+                      className="p-1 sm:p-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors"
+                      title="Edit"
+                    >
+                      <Edit size={14} className="sm:w-4 sm:h-4" />
+                    </button>
+                    <button
+                      onClick={() => onDelete(pen)}
+                      className="p-1 sm:p-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={14} className="sm:w-4 sm:h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

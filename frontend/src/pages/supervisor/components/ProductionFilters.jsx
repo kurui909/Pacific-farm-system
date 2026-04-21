@@ -1,7 +1,5 @@
-// src/pages/Production/components/ProductionFilters.jsx
-import { useState } from 'react';
-import { Search, Sliders, ChevronDown, X } from 'lucide-react';
-import { FilterBadge } from '../../../components/common/FilterBadge';
+// src/pages/supervisor/components/ProductionFilters.jsx
+import { Search, X } from 'lucide-react';
 
 const formatDate = (date) => date?.toISOString().split('T')[0];
 
@@ -17,123 +15,148 @@ export const ProductionFilters = ({
   hasActiveFilters,
   onClearFilters,
 }) => {
-  const [showFilters, setShowFilters] = useState(false);
-
   const applyDatePreset = (preset) => {
     const today = new Date();
-    let start = new Date(),
-      end = new Date();
-    if (preset === 'today') {
-      start = today;
-      end = today;
-    } else if (preset === 'yesterday') {
-      start.setDate(today.getDate() - 1);
-      end = start;
-    } else if (preset === 'last7days') {
-      start.setDate(today.getDate() - 7);
-      end = today;
-    } else if (preset === 'thisMonth') {
-      start = new Date(today.getFullYear(), today.getMonth(), 1);
-      end = today;
+    let start = new Date();
+    let end = new Date();
+    switch (preset) {
+      case 'today':
+        start = today;
+        end = today;
+        break;
+      case 'yesterday':
+        start.setDate(today.getDate() - 1);
+        end = start;
+        break;
+      case 'last7days':
+        start.setDate(today.getDate() - 7);
+        end = today;
+        break;
+      case 'thisMonth':
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end = today;
+        break;
+      case 'lastMonth':
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        end = new Date(today.getFullYear(), today.getMonth(), 0);
+        break;
+      default:
+        return;
     }
     setDateRange({ start: formatDate(start), end: formatDate(end) });
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border dark:border-gray-700 p-4 md:p-5 space-y-3">
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input
-            type="text"
-            placeholder="Search by staff or pen..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 transition"
-          >
-            <Sliders size={16} /> Filters
-            {activeFilterCount > 0 && (
-              <span className="ml-1 bg-blue-500 text-white rounded-full px-1.5 text-xs">{activeFilterCount}</span>
-            )}
-            <ChevronDown size={16} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-          </button>
-          {hasActiveFilters && (
-            <button onClick={onClearFilters} className="flex items-center gap-1 px-4 py-2.5 text-red-600 bg-red-50 rounded-xl hover:bg-red-100">
-              <X size={16} /> Clear
-            </button>
-          )}
-        </div>
-      </div>
-
-      {showFilters && (
-        <div className="pt-4 border-t dark:border-gray-700">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400">Pen</label>
-              <select
-                value={selectedPen}
-                onChange={(e) => setSelectedPen(e.target.value)}
-                className="w-full border dark:border-gray-600 rounded-xl px-3 py-2 bg-white dark:bg-gray-700"
-              >
-                <option value="all">All Pens</option>
-                {pens.map((pen) => (
-                  <option key={pen.id} value={pen.id}>{pen.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Date Range</label>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={dateRange.start}
-                  onChange={(e) => setDateRange((prev) => ({ ...prev, start: e.target.value }))}
-                  className="flex-1 border dark:border-gray-600 rounded-xl px-3 py-2 bg-white dark:bg-gray-700"
-                />
-                <span className="text-gray-400">–</span>
-                <input
-                  type="date"
-                  value={dateRange.end}
-                  onChange={(e) => setDateRange((prev) => ({ ...prev, end: e.target.value }))}
-                  className="flex-1 border dark:border-gray-600 rounded-xl px-3 py-2 bg-white dark:bg-gray-700"
-                />
-              </div>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {['today', 'yesterday', 'last7days', 'thisMonth'].map((preset) => (
-                  <button
-                    key={preset}
-                    onClick={() => applyDatePreset(preset)}
-                    className="px-2 py-1 text-xs rounded-lg bg-gray-100 dark:bg-gray-700"
-                  >
-                    {preset === 'today' ? 'Today' : preset === 'yesterday' ? 'Yesterday' : preset === 'last7days' ? 'Last 7 days' : 'This month'}
-                  </button>
-                ))}
-              </div>
-            </div>
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3 space-y-3">
+      {/* Filter row - wraps on small screens */}
+      <div className="flex flex-wrap gap-2 items-end">
+        {/* Search */}
+        <div className="flex-1 min-w-[140px]">
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Search</label>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+            <input
+              type="text"
+              placeholder="Pen or staff..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full pl-8 pr-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+            />
           </div>
         </div>
-      )}
 
+        {/* Pen dropdown */}
+        <div className="min-w-[130px]">
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Pen</label>
+          <select
+            value={selectedPen}
+            onChange={(e) => setSelectedPen(e.target.value)}
+            className="w-full px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+          >
+            <option value="all">All Pens</option>
+            {pens.map((pen) => (
+              <option key={pen.id} value={pen.id}>
+                {pen.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Date range from */}
+        <div className="min-w-[120px]">
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">From</label>
+          <input
+            type="date"
+            value={dateRange.start}
+            onChange={(e) => setDateRange((prev) => ({ ...prev, start: e.target.value }))}
+            className="w-full px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+          />
+        </div>
+
+        {/* Date range to */}
+        <div className="min-w-[120px]">
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">To</label>
+          <input
+            type="date"
+            value={dateRange.end}
+            onChange={(e) => setDateRange((prev) => ({ ...prev, end: e.target.value }))}
+            className="w-full px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+          />
+        </div>
+
+        {/* Quick date presets - horizontal scroll on mobile */}
+        <div className="flex-1 min-w-[180px]">
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Quick range</label>
+          <div className="flex flex-wrap gap-1">
+            {['today', 'yesterday', 'last7days', 'thisMonth', 'lastMonth'].map((preset) => (
+              <button
+                key={preset}
+                onClick={() => applyDatePreset(preset)}
+                className="px-2 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition whitespace-nowrap"
+              >
+                {preset === 'today' && 'Today'}
+                {preset === 'yesterday' && 'Yesterday'}
+                {preset === 'last7days' && 'Last 7d'}
+                {preset === 'thisMonth' && 'This month'}
+                {preset === 'lastMonth' && 'Last month'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Clear filters button */}
+        {hasActiveFilters && (
+          <div className="flex items-end">
+            <button
+              onClick={onClearFilters}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-800/30 transition"
+            >
+              <X size={14} /> Clear
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Active filter badges (optional but helpful) */}
       {hasActiveFilters && (
-        <div className="flex flex-wrap gap-2 pt-2">
-          {searchInput && <FilterBadge label={`Search: "${searchInput}"`} onRemove={() => setSearchInput('')} />}
+        <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100 dark:border-gray-700">
+          {searchInput && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+              Search: "{searchInput}"
+              <button onClick={() => setSearchInput('')} className="hover:text-blue-900">×</button>
+            </span>
+          )}
           {selectedPen !== 'all' && (
-            <FilterBadge
-              label={`Pen: ${pens.find((p) => p.id === selectedPen)?.name || selectedPen}`}
-              onRemove={() => setSelectedPen('all')}
-            />
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+              Pen: {pens.find(p => p.id === Number(selectedPen))?.name || selectedPen}
+              <button onClick={() => setSelectedPen('all')} className="hover:text-blue-900">×</button>
+            </span>
           )}
           {(dateRange.start || dateRange.end) && (
-            <FilterBadge
-              label={`Date: ${dateRange.start || 'any'} → ${dateRange.end || 'any'}`}
-              onRemove={() => setDateRange({ start: '', end: '' })}
-            />
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+              Date: {dateRange.start || 'any'} → {dateRange.end || 'any'}
+              <button onClick={() => setDateRange({ start: '', end: '' })} className="hover:text-blue-900">×</button>
+            </span>
           )}
         </div>
       )}

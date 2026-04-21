@@ -1,14 +1,13 @@
 // src/components/forms/ProductionForm.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
-import toast from 'react-hot-toast'; // Add this line
-
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Loader2, Calendar, User, Package, Activity, AlertCircle, HelpCircle, 
   TrendingUp, Droplet, Skull, Egg, Wheat, Users 
 } from 'lucide-react';
 import { productionService } from '../../services/api';
+import toast from 'react-hot-toast';
 
 const Tooltip = ({ text, children }) => (
   <div className="group relative inline-block">
@@ -90,7 +89,12 @@ export default function ProductionForm({ isOpen, onClose, onSubmit, isSubmitting
 
   const selectedPenId = useWatch({ control, name: 'pen_id' });
   const selectedDate = useWatch({ control, name: 'date' });
-  const selectedPen = useMemo(() => pens?.find((p) => String(p.id) === String(selectedPenId)), [pens, selectedPenId]);
+  const openingStockValue = useWatch({ control, name: 'opening_stock' });
+
+  const selectedPen = useMemo(
+    () => pens?.find((p) => String(p.id) === String(selectedPenId)),
+    [pens, selectedPenId]
+  );
 
   // Watch egg fields for live total
   const good = useWatch({ control, name: 'good_eggs' }) || 0;
@@ -120,46 +124,43 @@ export default function ProductionForm({ isOpen, onClose, onSubmit, isSubmitting
     }
   }, [selectedPen, selectedDate, setValue]);
 
-  // Auto‑fetch opening stock from previous day
+  // Auto‑fetch opening stock from previous day (only if not manually edited)
   useEffect(() => {
     if (initialData || !selectedPenId || !selectedDate) return;
     let active = true;
     const fetchPrev = async () => {
-      const prevDate = new Date(selectedDate);
-      prevDate.setDate(prevDate.getDate() - 1);
       setFetchingPrevStock(true);
       try {
-        if (typeof productionService.getPreviousRecord !== 'function') {
-          console.warn('productionService.getPreviousRecord not defined');
-          if (active) setValue('opening_stock', '');
-          return;
+        const prevDate = new Date(selectedDate);
+        prevDate.setDate(prevDate.getDate() - 1);
+        const formattedDate = prevDate.toISOString().split('T')[0];
+        const prevRecord = await productionService.getPreviousRecord(selectedPenId, formattedDate);
+        if (!active) return;
+        // Only auto-fill if the field is empty (not already filled by user)
+        if (prevRecord?.closing_stock != null && (!openingStockValue || openingStockValue === '')) {
+          setValue('opening_stock', prevRecord.closing_stock);
         }
-        const prevRecord = await productionService.getPreviousRecord(selectedPenId, prevDate.toISOString().split('T')[0]);
-        if (active && prevRecord?.closing_stock != null) setValue('opening_stock', prevRecord.closing_stock);
-        else if (active) setValue('opening_stock', '');
-      } catch (err) {
-        console.warn('Failed to fetch previous record', err);
+      } catch (error) {
+        console.warn('Failed to fetch previous record', error);
         if (active) setValue('opening_stock', '');
       } finally {
         if (active) setFetchingPrevStock(false);
       }
     };
     fetchPrev();
-    return () => (active = false);
-  }, [initialData, selectedPenId, selectedDate, setValue]);
+    return () => { active = false; };
+  }, [initialData, selectedPenId, selectedDate, setValue, openingStockValue]);
 
   const handleFormSubmit = (data) => {
-    // Convert empty strings to null for numeric fields
     const cleanNumber = (val) => {
       if (val === '' || val === undefined || val === null) return null;
       const num = Number(val);
       return isNaN(num) ? null : num;
     };
 
-    // Prepare payload exactly matching backend ProductionCreate schema
     const payload = {
       pen_id: parseInt(data.pen_id),
-      date: data.date,  // YYYY-MM-DD – FastAPI will parse as date
+      date: data.date,
       age_days: cleanNumber(data.age_days),
       week_number: cleanNumber(data.week_number),
       opening_stock: cleanNumber(data.opening_stock),
@@ -178,7 +179,6 @@ export default function ProductionForm({ isOpen, onClose, onSubmit, isSubmitting
       total_eggs: totalEggs,
     };
 
-    // Validate required fields
     if (!payload.pen_id) {
       toast.error('Please select a pen');
       return;
@@ -196,7 +196,6 @@ export default function ProductionForm({ isOpen, onClose, onSubmit, isSubmitting
       return;
     }
 
-    console.log('Submitting payload:', payload);
     onSubmit(payload);
     reset();
   };
@@ -295,9 +294,9 @@ export default function ProductionForm({ isOpen, onClose, onSubmit, isSubmitting
                   name="opening_stock"
                   register={register}
                   errors={errors}
-                  placeholder="e.g., 5000"
+                  placeholder={fetchingPrevStock ? 'Loading previous day closing stock…' : 'Auto-filled from previous day'}
                   required={true}
-                  tooltip="Number of birds at the start of the day (auto-filled from previous day's closing stock)"
+                  tooltip="Automatically filled from the previous day's closing stock when available"
                   icon={Users}
                 />
                 <NumberField
@@ -305,9 +304,9 @@ export default function ProductionForm({ isOpen, onClose, onSubmit, isSubmitting
                   name="closing_stock"
                   register={register}
                   errors={errors}
-                  placeholder="e.g., 4950"
+                  placeholder="Enter today's closing bird count"
                   required={true}
-                  tooltip="Number of birds at the end of the day (after mortality/culls)"
+                  tooltip="Number of birds at the end of today after mortality/culls"
                   icon={Users}
                 />
                 <NumberField
@@ -331,60 +330,12 @@ export default function ProductionForm({ isOpen, onClose, onSubmit, isSubmitting
                 <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Egg Quality Counts</h4>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                <NumberField
-                  label="Good Eggs"
-                  name="good_eggs"
-                  register={register}
-                  errors={errors}
-                  placeholder="0"
-                  tooltip="Grade A eggs – marketable"
-                  icon={Egg}
-                />
-                <NumberField
-                  label="Damaged"
-                  name="damaged_eggs"
-                  register={register}
-                  errors={errors}
-                  placeholder="0"
-                  tooltip="Cracked or dirty eggs"
-                  icon={AlertCircle}
-                />
-                <NumberField
-                  label="Small"
-                  name="small_eggs"
-                  register={register}
-                  errors={errors}
-                  placeholder="0"
-                  tooltip="Underweight eggs"
-                  icon={Egg}
-                />
-                <NumberField
-                  label="Double Yolk"
-                  name="double_yolk_eggs"
-                  register={register}
-                  errors={errors}
-                  placeholder="0"
-                  tooltip="Eggs with two yolks"
-                  icon={Egg}
-                />
-                <NumberField
-                  label="Soft Shell"
-                  name="soft_shell_eggs"
-                  register={register}
-                  errors={errors}
-                  placeholder="0"
-                  tooltip="Shell-less or very thin shells"
-                  icon={Egg}
-                />
-                <NumberField
-                  label="Shells"
-                  name="shells"
-                  register={register}
-                  errors={errors}
-                  placeholder="0"
-                  tooltip="Broken shells only (no content)"
-                  icon={Egg}
-                />
+                <NumberField label="Good Eggs" name="good_eggs" register={register} errors={errors} placeholder="0" tooltip="Grade A eggs" icon={Egg} />
+                <NumberField label="Damaged" name="damaged_eggs" register={register} errors={errors} placeholder="0" tooltip="Cracked/dirty" icon={AlertCircle} />
+                <NumberField label="Small" name="small_eggs" register={register} errors={errors} placeholder="0" tooltip="Underweight" icon={Egg} />
+                <NumberField label="Double Yolk" name="double_yolk_eggs" register={register} errors={errors} placeholder="0" tooltip="Two yolks" icon={Egg} />
+                <NumberField label="Soft Shell" name="soft_shell_eggs" register={register} errors={errors} placeholder="0" tooltip="Shell-less" icon={Egg} />
+                <NumberField label="Shells" name="shells" register={register} errors={errors} placeholder="0" tooltip="Broken shells" icon={Egg} />
               </div>
               <div className="mt-3 p-4 rounded-lg bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/10 border border-blue-200 dark:border-blue-800">
                 <div className="flex items-center justify-between">
@@ -392,9 +343,7 @@ export default function ProductionForm({ isOpen, onClose, onSubmit, isSubmitting
                     <TrendingUp size={20} className="text-blue-600" />
                     <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Production (eggs)</label>
                   </div>
-                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                    {totalEggs.toLocaleString()}
-                  </div>
+                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{totalEggs.toLocaleString()}</div>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Auto-sum of all egg categories</p>
               </div>
@@ -407,67 +356,18 @@ export default function ProductionForm({ isOpen, onClose, onSubmit, isSubmitting
                 <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Flock Health & Management</h4>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <NumberField
-                  label="Broody Hens"
-                  name="broody_hen"
-                  register={register}
-                  errors={errors}
-                  placeholder="0"
-                  tooltip="Hens that are sitting on eggs (not laying)"
-                  icon={Droplet}
-                />
-                <NumberField
-                  label="Culls"
-                  name="culls"
-                  register={register}
-                  errors={errors}
-                  placeholder="0"
-                  tooltip="Birds removed due to low production / illness"
-                  icon={AlertCircle}
-                />
-                <NumberField
-                  label="Mortality"
-                  name="mortality"
-                  register={register}
-                  errors={errors}
-                  placeholder="0"
-                  tooltip="Deaths during the day"
-                  icon={Skull}
-                />
-                <InputField
-                  label="Staff Name"
-                  name="staff_name"
-                  register={register}
-                  errors={errors}
-                  placeholder="e.g., John Doe"
-                  tooltip="Person who recorded this entry"
-                  icon={User}
-                />
+                <NumberField label="Broody Hens" name="broody_hen" register={register} errors={errors} placeholder="0" tooltip="Sitting on eggs" icon={Droplet} />
+                <NumberField label="Culls" name="culls" register={register} errors={errors} placeholder="0" tooltip="Removed birds" icon={AlertCircle} />
+                <NumberField label="Mortality" name="mortality" register={register} errors={errors} placeholder="0" tooltip="Deaths" icon={Skull} />
+                <InputField label="Staff Name" name="staff_name" register={register} errors={errors} placeholder="e.g., John Doe" tooltip="Recorded by" icon={User} />
               </div>
             </section>
 
             {/* Actions */}
             <div className="flex flex-col-reverse gap-3 pt-4 border-t border-gray-200 dark:border-gray-700 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-6 py-2.5 font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="rounded-lg bg-blue-600 px-6 py-2.5 font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    {initialData ? 'Updating...' : 'Submitting...'}
-                  </>
-                ) : (
-                  initialData ? 'Update Entry' : 'Submit Entry'
-                )}
+              <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-6 py-2.5 font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">Cancel</button>
+              <button type="submit" disabled={isSubmitting} className="rounded-lg bg-blue-600 px-6 py-2.5 font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                {isSubmitting ? <><Loader2 size={16} className="animate-spin" />{initialData ? 'Updating...' : 'Submitting...'}</> : (initialData ? 'Update Entry' : 'Submit Entry')}
               </button>
             </div>
           </form>

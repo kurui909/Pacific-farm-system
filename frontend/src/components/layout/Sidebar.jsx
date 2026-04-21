@@ -26,7 +26,7 @@ const navConfig = {
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/production', icon: Egg, label: 'Production' },
     { path: '/pens', icon: Home, label: 'Pens' },
-    { path: '/inventory/eggs', icon: Store, label: 'Eggs & Trays' },
+    { path: '/inventory/eggs', icon: Store, label: 'Eggs' },
     { path: '/inventory/feed', icon: Wheat, label: 'Feed' },
     { path: '/analytics', icon: BarChart3, label: 'Analytics' },
     { path: '/reports', icon: FileText, label: 'Reports' },

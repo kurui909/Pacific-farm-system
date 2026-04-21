@@ -1,5 +1,6 @@
 // src/services/api.js
 import axios from 'axios';
+import { useMutation } from '@tanstack/react-query';
 
 const rawApiUrl =
   process.env.REACT_APP_API_URL || 'http://192.168.1.133:8000';
@@ -209,6 +210,41 @@ export const blockService = {
   update: (id, data) => api.put(`/blocks/${id}`, data).then((r) => r.data),
   delete: (id) => api.delete(`/blocks/${id}`).then((r) => r.data),
   assignPens: (blockId, penIds) => api.post(`/blocks/${blockId}/assign-pens`, { pen_ids: penIds }).then((r) => r.data),
+};
+
+// ----------------------------------------------------------------------
+// Weather Service
+// ----------------------------------------------------------------------
+export const weatherService = {
+  getCurrentWeather: (lat, lon) => {
+    const apiKey = process.env.REACT_APP_OPENWEATHER_API_KEY;
+    if (!apiKey) {
+      console.warn('OpenWeather API key not configured');
+      return Promise.resolve(null);
+    }
+    
+    return fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`)
+      .then((r) => r.json())
+      .catch((error) => {
+        console.error('Weather API error:', error);
+        return null;
+      });
+  },
+
+  getWeatherByCity: (city) => {
+    const apiKey = process.env.REACT_APP_OPENWEATHER_API_KEY;
+    if (!apiKey) {
+      console.warn('OpenWeather API key not configured');
+      return Promise.resolve(null);
+    }
+    
+    return fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`)
+      .then((r) => r.json())
+      .catch((error) => {
+        console.error('Weather API error:', error);
+        return null;
+      });
+  },
 };
 
 // ----------------------------------------------------------------------

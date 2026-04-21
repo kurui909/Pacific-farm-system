@@ -5,7 +5,7 @@ import { ChevronRight, Home, ArrowLeft } from 'lucide-react';
 
 /**
  * PageHeader - Modern page header with optional gradient title, actions, breadcrumbs
- * Fully aligned with Settings page design (gradient text, consistent spacing, dark mode)
+ * Fully responsive: smaller title on mobile, buttons wrap, breadcrumbs stack gracefully
  */
 export default function PageHeader({
   title,
@@ -15,7 +15,7 @@ export default function PageHeader({
   showBackButton = false,
   onBack,
   icon: Icon = null,
-  gradientTitle = true, // new: apply gradient to main title
+  gradientTitle = true,
 }) {
   const location = useLocation();
 
@@ -34,7 +34,6 @@ export default function PageHeader({
   const renderAction = (action, index) => {
     if (!action) return null;
 
-    // Support both element and object config
     if (typeof action === 'object' && action !== null && !isValidElement(action)) {
       const IconComp = action.icon;
       const variant = action.variant || 'secondary';
@@ -56,23 +55,22 @@ export default function PageHeader({
           type="button"
           onClick={action.onClick}
           disabled={action.disabled}
-          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${variantClasses[variant]}`}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 md:px-4 md:py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${variantClasses[variant]}`}
         >
-          {IconComp && <IconComp size={18} />}
+          {IconComp && <IconComp size={16} className="md:w-[18px] md:h-[18px]" />}
           {action.label}
         </button>
       );
     }
 
-    // Direct element (e.g., <button>)
     return action;
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2 md:space-y-3">
       {/* Breadcrumbs */}
       {breadcrumbs && breadcrumbItems.length > 0 && (
-        <nav aria-label="Breadcrumb" className="flex items-center text-sm">
+        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center text-xs md:text-sm">
           <Link
             to="/"
             className="flex items-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition"
@@ -101,27 +99,27 @@ export default function PageHeader({
       )}
 
       {/* Main header row */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          {/* Optional icon circle (matching Settings section header) */}
+      <div className="flex flex-col gap-3 md:gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 md:gap-3">
+          {/* Optional icon circle – hidden on mobile */}
           {Icon && (
-            <div className="hidden sm:flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30">
-              <Icon size={20} className="text-blue-600 dark:text-blue-400" />
+            <div className="hidden sm:flex h-9 w-9 md:h-10 md:w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30">
+              <Icon size={18} className="md:w-5 md:h-5 text-blue-600 dark:text-blue-400" />
             </div>
           )}
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2">
               {showBackButton && (
                 <button
                   onClick={onBack || (() => window.history.back())}
-                  className="rounded-full p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                  className="rounded-full p-1.5 md:p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
                   aria-label="Go back"
                 >
-                  <ArrowLeft size={20} />
+                  <ArrowLeft size={18} className="md:w-5 md:h-5" />
                 </button>
               )}
               <h1
-                className={`text-2xl md:text-3xl font-bold tracking-tight ${
+                className={`text-xl md:text-3xl font-bold tracking-tight ${
                   gradientTitle
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent'
                     : 'text-gray-900 dark:text-white'
@@ -131,14 +129,14 @@ export default function PageHeader({
               </h1>
             </div>
             {subtitle && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-2xl">
+              <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-0.5 md:mt-1 max-w-2xl">
                 {subtitle}
               </p>
             )}
           </div>
         </div>
 
-        {/* Actions – flexible container */}
+        {/* Actions – wrap on small screens */}
         {actions && (
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             {Array.isArray(actions) ? actions.map(renderAction) : renderAction(actions)}
