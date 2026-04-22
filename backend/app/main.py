@@ -1,46 +1,24 @@
 import sys
 import logging
-import os
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
-from app.database import engine, Base
-from app.config import settings
-from app.routers import (
-    auth, users, pens, production, dashboard, analytics,
-    eggs, feed, trays, reports, notifications, alerts,
-    subscription, payments, blocks, farms
-)
-
-# Setup logging
-logging.basicConfig(
-    stream=sys.stdout,
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting up SmartPoultry API...")
+    logger.info("Starting app...")
     try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database tables verified/created.")
-    except Exception as e:
-        logger.exception("FATAL: Failed to initialize database")
+        # your startup logic here
+        pass
+    except Exception:
+        logger.exception("Startup failed")
         raise
     yield
-    logger.info("Shutting down...")
+    logger.info("Shutting down")
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.VERSION,
-    lifespan=lifespan
-)
+app = FastAPI(lifespan=lifespan)
 
 # CORS – single instance
 origins = [
