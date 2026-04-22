@@ -1,26 +1,49 @@
 import sys
 import logging
+import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
 
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+from fastapi import FastAPI
+# ✅ Add this import to fix the NameError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from app.database import engine, Base
+from app.config import settings
+from app.routers import (
+    auth, users, pens, production, dashboard, analytics,
+    eggs, feed, trays, reports, notifications, alerts,
+    subscription, payments, blocks, farms
+)
+
+# Setup logging
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting app...")
+    logger.info("Starting up SmartPoultry API...")
     try:
-        # your startup logic here
-        pass
-    except Exception:
-        logger.exception("Startup failed")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables verified/created.")
+    except Exception as e:
+        logger.exception("FATAL: Application startup failed due to an exception.")
         raise
     yield
-    logger.info("Shutting down")
+    logger.info("Shutting down...")
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
+    lifespan=lifespan
+)
 
-# CORS – single instance
+# CORS configuration
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -37,7 +60,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static files
+# Static files (uploads)
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
