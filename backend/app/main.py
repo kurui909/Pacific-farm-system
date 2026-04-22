@@ -3,17 +3,28 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+# ------------------------------------------------------------------
+# Top-level exception handler to catch import/startup errors
+# ------------------------------------------------------------------
+try:
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.staticfiles import StaticFiles
 
-from app.database import engine, Base
-from app.config import settings
-from app.routers import (
-    auth, users, pens, production, dashboard, analytics,
-    eggs, feed, trays, reports, notifications, alerts,
-    subscription, payments, blocks, farms
-)
+    from app.database import engine, Base
+    from app.config import settings
+    from app.routers import (
+        auth, users, pens, production, dashboard, analytics,
+        eggs, feed, trays, reports, notifications, alerts,
+        subscription, payments, blocks, farms
+    )
+except Exception:
+    print("=" * 80)
+    print("CRITICAL: Failed to import required modules during startup")
+    print("=" * 80)
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
 
 # Setup logging
 logging.basicConfig(
