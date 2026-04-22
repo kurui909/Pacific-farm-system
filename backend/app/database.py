@@ -6,7 +6,6 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=True,
     pool_pre_ping=True,
-    # For Supabase pooler, remove pool_size / max_overflow
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -18,11 +17,7 @@ AsyncSessionLocal = async_sessionmaker(
 
 Base = declarative_base()
 
-# ✅ Add this dependency – used by auth.py and other routers
+# ✅ Dependency used by all routers
 async def get_db() -> AsyncSession:
-    """
-    FastAPI dependency that provides an async database session.
-    The session is automatically closed after the request finishes.
-    """
     async with AsyncSessionLocal() as session:
         yield session

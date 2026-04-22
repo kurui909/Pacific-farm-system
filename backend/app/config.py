@@ -1,37 +1,36 @@
-
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 import os
 
 class Settings(BaseSettings):
-    # Project metadata
+    # Project
     PROJECT_NAME: str = "SmartPoultry API"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
-    
-    # Database – must be set via environment variable on Render/Supabase
-    # No default value! This forces configuration via DATABASE_URL env var.
-    DATABASE_URL: str = "postgresql+asyncpg://postgres.rrspyevxqbjkvxpmtaju:Kipkurui156821BB@aws-1-eu-west-3.pooler.supabase.com:6543/postgres"
 
-    
-    # Connection pooling
-    DATABASE_POOL_SIZE: int = 20
-    DATABASE_MAX_OVERFLOW: int = 10
-    
-    # JWT security
-    SECRET_KEY: str = ""  # No default – must be set in environment
+    # Database (must be set in environment)
+    DATABASE_URL: str
+
+    # JWT
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
+
     # Google OAuth (optional)
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
-    
-    # File uploads directory
+
+    # File uploads
     UPLOAD_DIR: str = "uploads"
-    
-    # Configure Pydantic to read from .env file (for local dev) and environment variables
+
+    # Email (optional – app will still work if not set)
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: Optional[int] = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    EMAIL_FROM: Optional[str] = None
+    FRONTEND_URL: str = "http://localhost:3000"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -39,12 +38,10 @@ class Settings(BaseSettings):
         case_sensitive=False
     )
 
-# Create singleton instance
 settings = Settings()
 
-# Optional: print a masked version of DATABASE_URL only in development
+# Optional: masked logging for DATABASE_URL (only in development)
 if os.getenv("ENVIRONMENT") != "production":
-    # Mask password for logging safety
     db_url = settings.DATABASE_URL
     if "@" in db_url:
         parts = db_url.split("@")
