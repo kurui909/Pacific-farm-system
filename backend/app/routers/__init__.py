@@ -1,5 +1,0 @@
-from app.routers import (
-    auth, users, pens, production, dashboard, analytics,
-    eggs, feed, trays, reports, notifications, alerts,
-    subscription, payments, blocks, farms
-)
