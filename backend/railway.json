@@ -6,7 +6,8 @@
     "startCommand": "bash entrypoint.sh",
     "restartPolicyType": "ON_FAILURE",
     "envVariables": {
-      "PORT": "8000"
+      "PORT": "8000",
+      "DATABASE_URL": "postgresql+asyncpg://postgres:FHQrVwNpuBlLawhyCMFHUeaVURFyHYXQ@crossover.proxy.rlwy.net:57215/railway"
     }
   }
 }
