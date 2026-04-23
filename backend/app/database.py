@@ -1,23 +1,23 @@
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker, declarative_base
 from app.config import settings
 
+# Use asyncpg for PostgreSQL
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=True,
-    pool_pre_ping=True,
+    echo=False,          # Set to True for SQL logging (development only)
+    future=True,
 )
 
-AsyncSessionLocal = async_sessionmaker(
-    bind=engine,
+AsyncSessionLocal = sessionmaker(
+    engine,
     class_=AsyncSession,
-    autoflush=False,
     expire_on_commit=False,
 )
 
 Base = declarative_base()
 
-# ✅ Dependency used by all routers
-async def get_db() -> AsyncSession:
+async def get_db():
+    """Dependency to get a database session."""
     async with AsyncSessionLocal() as session:
         yield session

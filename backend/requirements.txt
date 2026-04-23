@@ -1,9 +1,8 @@
 fastapi
-uvicorn
-gunicorn
+uvicorn[standard]
 sqlalchemy
 asyncpg
-psycopg2-binary
-python-dotenv
 pydantic
 pydantic-settings
+python-multipart
+# Add your other dependencies: psycopg2-binary, etc.

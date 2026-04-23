@@ -18,7 +18,7 @@ try:
         eggs, feed, trays, reports, notifications, alerts,
         subscription, payments, blocks, farms
     )
-except Exception:
+except Exception as e:
     print("=" * 80)
     print("CRITICAL: Failed to import required modules during startup")
     print("=" * 80)
@@ -29,7 +29,7 @@ except Exception:
 # Setup logging
 logging.basicConfig(
     stream=sys.stdout,
-    level=logging.DEBUG,
+    level=logging.INFO,   # Use INFO in production (DEBUG is too noisy)
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
@@ -53,24 +53,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS configuration
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://192.168.1.133:3000",
-    "http://192.168.1.133",
-    "http://192.168.1.133:8000",
-]
-
+# CORS configuration - now dynamic from settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Static files (uploads)
+# Static files (uploads) - ensure directory exists
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
@@ -92,3 +84,8 @@ app.include_router(farms.router, prefix=f"{settings.API_V1_STR}/farms", tags=["f
 @app.get("/")
 async def root():
     return {"message": "SmartPoultry API"}
+
+# Optional: health check endpoint for Railway
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
