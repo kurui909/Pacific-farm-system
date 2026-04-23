@@ -11,5 +11,5 @@ COPY . .
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
-# Use the entrypoint script
-ENTRYPOINT ["./entrypoint.sh"]
+# Use shell form so $PORT expands
+CMD bash entrypoint.sh

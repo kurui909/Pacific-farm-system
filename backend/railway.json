@@ -7,7 +7,8 @@
     "restartPolicyType": "ON_FAILURE",
     "envVariables": {
       "PORT": "8000",
-      "DATABASE_URL": "postgresql+asyncpg://postgres:FHQrVwNpuBlLawhyCMFHUeaVURFyHYXQ@crossover.proxy.rlwy.net:57215/railway"
+      "ENVIRONMENT": "production",
+      "DATABASE_URL": "postgresql+asyncpg://postgres:FHQrVwNpuBlLawhyCMFHUeaVURFyHYXQ@crossover.proxy.rlwy.net:57215/railway?sslmode=require"
     }
   }
 }
