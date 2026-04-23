@@ -7,5 +7,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Use shell form so $PORT expands
-CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT
+# Copy entrypoint script
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
+
+# Use the entrypoint script
+ENTRYPOINT ["./entrypoint.sh"]
