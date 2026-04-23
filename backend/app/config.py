@@ -1,37 +1,58 @@
-import os
 from typing import List
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    # ------------------------------------------------------------------
+    # App Info
+    # ------------------------------------------------------------------
     PROJECT_NAME: str = "SmartPoultry API"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
 
-    # Database - Railway provides DATABASE_URL automatically
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/db")
+    # ------------------------------------------------------------------
+    # Environment
+    # ------------------------------------------------------------------
+    ENVIRONMENT: str = "development"  # change via Railway env
 
-    # Upload directory - use /tmp on Railway (ephemeral)
-    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "/tmp/uploads")
+    # ------------------------------------------------------------------
+    # Database (Railway auto-injects DATABASE_URL)
+    # ------------------------------------------------------------------
+    DATABASE_URL: str
 
-    # CORS - read comma-separated origins from env, plus localhost defaults
-    ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "")
-    
+    # ------------------------------------------------------------------
+    # File Uploads
+    # ------------------------------------------------------------------
+    UPLOAD_DIR: str = "/tmp/uploads"
+
+    # ------------------------------------------------------------------
+    # CORS
+    # ------------------------------------------------------------------
+    ALLOWED_ORIGINS: str = ""
+
     @property
     def cors_origins(self) -> List[str]:
-        origins = [
+        default_origins = [
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "http://192.168.1.133:3000",
             "http://192.168.1.133",
             "http://192.168.1.133:8000",
         ]
-        # Add origins from environment variable (e.g., your Railway frontend URL)
+
+        env_origins = []
         if self.ALLOWED_ORIGINS:
-            origins.extend([origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")])
-        return origins
+            env_origins = [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+        # Remove duplicates
+        return list(set(default_origins + env_origins))
 
+    # ------------------------------------------------------------------
+    # Pydantic Config
+    # ------------------------------------------------------------------
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True
+    )
+
+# Singleton
 settings = Settings()

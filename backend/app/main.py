@@ -18,7 +18,7 @@ try:
         eggs, feed, trays, reports, notifications, alerts,
         subscription, payments, blocks, farms
     )
-except Exception as e:
+except Exception:
     print("=" * 80)
     print("CRITICAL: Failed to import required modules during startup")
     print("=" * 80)
@@ -26,34 +26,52 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 
-# Setup logging
+# ------------------------------------------------------------------
+# Logging Configuration
+# ------------------------------------------------------------------
 logging.basicConfig(
     stream=sys.stdout,
-    level=logging.INFO,   # Use INFO in production (DEBUG is too noisy)
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("smartpoultry")
 
+# ------------------------------------------------------------------
+# Lifespan (startup + shutdown)
+# ------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting up SmartPoultry API...")
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database tables verified/created.")
-    except Exception as e:
-        logger.exception("FATAL: Application startup failed due to an exception.")
-        raise
-    yield
-    logger.info("Shutting down...")
+    logger.info("🚀 Starting SmartPoultry API...")
 
+    try:
+        # ⚠️ Only auto-create tables in DEV
+        if settings.ENVIRONMENT == "development":
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("✅ Database tables verified/created (DEV mode).")
+        else:
+            logger.info("ℹ️ Skipping auto table creation (production mode).")
+
+    except Exception:
+        logger.exception("❌ FATAL: Startup failed.")
+        raise
+
+    yield
+
+    logger.info("🛑 Shutting down SmartPoultry API...")
+
+# ------------------------------------------------------------------
+# App Initialization
+# ------------------------------------------------------------------
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     lifespan=lifespan
 )
 
-# CORS configuration - now dynamic from settings
+# ------------------------------------------------------------------
+# CORS
+# ------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -62,11 +80,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static files (uploads) - ensure directory exists
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+# ------------------------------------------------------------------
+# Static Files (Uploads)
+# ------------------------------------------------------------------
+UPLOAD_DIR = settings.UPLOAD_DIR or "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Include all routers
+app.mount(
+    "/uploads",
+    StaticFiles(directory=UPLOAD_DIR),
+    name="uploads"
+)
+
+# ------------------------------------------------------------------
+# Routers
+# ------------------------------------------------------------------
 routers_list = [
     auth, users, pens, production, dashboard, analytics,
     eggs, feed, trays, reports, notifications, alerts,
@@ -79,13 +107,26 @@ for router_module in routers_list:
         prefix=settings.API_V1_STR
     )
 
-app.include_router(farms.router, prefix=f"{settings.API_V1_STR}/farms", tags=["farms"])
+# Farms (separate tagging)
+app.include_router(
+    farms.router,
+    prefix=f"{settings.API_V1_STR}/farms",
+    tags=["farms"]
+)
 
+# ------------------------------------------------------------------
+# Root & Health
+# ------------------------------------------------------------------
 @app.get("/")
 async def root():
-    return {"message": "SmartPoultry API"}
+    return {
+        "message": "SmartPoultry API",
+        "version": settings.VERSION
+    }
 
-# Optional: health check endpoint for Railway
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "service": "smartpoultry"
+    }
