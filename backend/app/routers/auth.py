@@ -32,7 +32,9 @@ async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
 
-    farm = Farm(name=data.farm_name, owner_id=user.id)
+    # FIX: Provide a default farm name if none is given
+    farm_name = data.farm_name if hasattr(data, 'farm_name') and data.farm_name else f"{user.full_name}'s Farm"
+    farm = Farm(name=farm_name, owner_id=user.id)
     db.add(farm)
     await db.flush()
 
