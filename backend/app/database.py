@@ -8,6 +8,14 @@ _db_url = settings.DATABASE_URL
 if _db_url.startswith("postgresql://"):
     _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+# asyncpg does not accept sslmode as a query parameter — it handles SSL
+# internally. Strip it (and the leading '?' if it's the only parameter) to
+# prevent a TypeError on connect.
+if "?sslmode=" in _db_url:
+    _db_url = _db_url[:_db_url.index("?sslmode=")]
+elif "&sslmode=" in _db_url:
+    _db_url = _db_url[:_db_url.index("&sslmode=")]
+
 engine = create_async_engine(
     _db_url,
     echo=False,          # Set to True for SQL logging (development only)
