@@ -18,7 +18,11 @@ try:
         eggs, feed, reports, notifications, alerts,
         subscription, payments, blocks, farms
     )
-except Exception:
+
+    # ✅ Import all models (this registers every table with Base.metadata)
+    from app import models
+
+except Exception as e:
     print("=" * 80)
     print("CRITICAL: Failed to import required modules during startup")
     print("=" * 80)
@@ -44,13 +48,10 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting SmartPoultry API...")
 
     try:
-        # ⚠️ Only auto-create tables in DEV
-        if settings.ENVIRONMENT == "development":
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-            logger.info("✅ Database tables verified/created (DEV mode).")
-        else:
-            logger.info("ℹ️ Skipping auto table creation (production mode).")
+        # Create tables if they don't exist (safe for all environments)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("✅ Database tables verified/created.")
 
     except Exception:
         logger.exception("❌ FATAL: Startup failed.")
