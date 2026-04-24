@@ -3,6 +3,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+# ------------------------------------------------------------------
+# Top-level exception handler to catch import/startup errors
+# ------------------------------------------------------------------
 try:
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
@@ -15,10 +18,6 @@ try:
         eggs, feed, reports, notifications, alerts,
         subscription, payments, blocks, farms
     )
-
-    # Import all models (do not list individual names)
-    from app import models
-
 except Exception:
     print("=" * 80)
     print("CRITICAL: Failed to import required modules during startup")
@@ -27,7 +26,6 @@ except Exception:
     traceback.print_exc()
     sys.exit(1)
 
-# ... rest of your code unchanged (logging, lifespan, app, etc.)
 # ------------------------------------------------------------------
 # Logging Configuration
 # ------------------------------------------------------------------
@@ -39,17 +37,20 @@ logging.basicConfig(
 logger = logging.getLogger("smartpoultry")
 
 # ------------------------------------------------------------------
-# Lifespan (startup + shutdown) – ALWAYS create tables
+# Lifespan (startup + shutdown)
 # ------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 Starting SmartPoultry API...")
 
     try:
-        # Create tables if they don't exist (safe for both dev and production)
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("✅ Database tables verified/created.")
+        # ⚠️ Only auto-create tables in DEV
+        if settings.ENVIRONMENT == "development":
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("✅ Database tables verified/created (DEV mode).")
+        else:
+            logger.info("ℹ️ Skipping auto table creation (production mode).")
 
     except Exception:
         logger.exception("❌ FATAL: Startup failed.")
