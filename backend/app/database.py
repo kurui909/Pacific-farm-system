@@ -1,5 +1,5 @@
 import os
-from urllib.parse import urlparse, parse_qs, urlunparse, quote
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 
@@ -13,36 +13,44 @@ if not DATABASE_URL:
     DATABASE_URL = "postgresql+asyncpg://postgres:FHQrVwNpuBlLawhyCMFHUeaVURFyHYXQ@postgres.railway.internal:5432/railway"
 
 # ------------------------------------------------------------------
-# FIX: Convert sslmode → ssl (asyncpg compatibility)
+# FIX: Strip SSL query parameters (asyncpg compatibility)
 # ------------------------------------------------------------------
-def fix_postgres_url(url: str) -> str:
-    """Replace sslmode query parameter with ssl, and ensure asyncpg driver."""
+# asyncpg does not accept SSL options as URL query parameters (e.g.
+# sslmode, ssl, sslcert).  The correct approach is to remove them from
+# the URL entirely and pass ssl=True via connect_args instead.
+
+SSL_QUERY_PARAMS = {"sslmode", "ssl", "sslcert", "sslkey", "sslrootcert", "sslcrl"}
+
+def fix_postgres_url(url: str) -> tuple[str, bool]:
+    """Strip SSL query parameters and ensure the asyncpg driver is used.
+
+    Returns:
+        (clean_url, ssl_required) where ssl_required is True when any
+        SSL-related query parameter was present in the original URL.
+    """
     parsed = urlparse(url)
-    
-    # 1. Convert sslmode → ssl in query string
+
+    # 1. Remove all SSL-related query parameters and track whether any existed
+    ssl_required = False
     if parsed.query:
         query_params = parse_qs(parsed.query, keep_blank_values=True)
-        if "sslmode" in query_params:
-            ssl_value = query_params["sslmode"][0]
-            # Remove sslmode and add ssl
-            del query_params["sslmode"]
-            # Only add ssl if value is truthy (e.g., 'require', 'prefer')
-            if ssl_value:
-                query_params["ssl"] = [ssl_value]
-            # Rebuild query string (URL-encode values)
-            new_query = "&".join(f"{k}={quote(v[0])}" for k, v in query_params.items())
-            parsed = parsed._replace(query=new_query)
-    
+        found_ssl_params = SSL_QUERY_PARAMS & query_params.keys()
+        if found_ssl_params:
+            ssl_required = True
+            for key in found_ssl_params:
+                del query_params[key]
+        new_query = urlencode({k: v[0] for k, v in query_params.items()})
+        parsed = parsed._replace(query=new_query)
+
     # 2. Ensure asyncpg driver is used
     if parsed.scheme.startswith("postgresql") and "+asyncpg" not in parsed.scheme:
         parsed = parsed._replace(scheme="postgresql+asyncpg")
-    
-    return urlunparse(parsed)
 
-DATABASE_URL = fix_postgres_url(DATABASE_URL)
+    return urlunparse(parsed), ssl_required
 
-# Debug: remove after confirming fix
-print(f"Final DATABASE_URL: {DATABASE_URL}")
+DATABASE_URL, _ssl_required = fix_postgres_url(DATABASE_URL)
+
+print(f"Final DATABASE_URL: {DATABASE_URL} (ssl={_ssl_required})")
 
 # ------------------------------------------------------------------
 # SQLAlchemy Engine Configuration
@@ -53,6 +61,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
+    connect_args={"ssl": True} if _ssl_required else {},
 )
 
 # ------------------------------------------------------------------
