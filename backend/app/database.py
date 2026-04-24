@@ -1,4 +1,5 @@
 import os
+import ssl
 from urllib.parse import urlparse, urlunparse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
@@ -17,18 +18,18 @@ def fix_postgres_url(url: str) -> str:
 
 DATABASE_URL = fix_postgres_url(DATABASE_URL)
 
-# Engine with SSL enabled but certificate verification disabled
+# Create an SSL context that does not verify certificates (for self-signed certs)
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
-    connect_args={
-        "ssl": True,
-        "ssl_verify_cert": False,      # ← disables certificate verification
-        "ssl_verify_identity": False,  # ← also disables hostname check
-    },
+    connect_args={"ssl": ssl_context},
 )
 
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
