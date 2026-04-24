@@ -1,36 +1,36 @@
 import asyncio
-from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
-from sqlalchemy.ext.asyncio import AsyncEngine
-from alembic import context
-import os
 import sys
+from pathlib import Path
+from logging.config import fileConfig
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from sqlalchemy import pool
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.config import settings
-from app.models import Base
+from alembic import context
 
-config = context.config
+# Add the project root to Python path so 'app' module can be found
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# Import your Base and models (adjust paths if needed)
+try:
+    from app.database import Base
+    from app import models   # this ensures all models are registered
+except ModuleNotFoundError as e:
+    raise ImportError(
+        "Could not import 'app.database.Base'. Make sure you run alembic from the project root "
+        "and that your project structure has an 'app' package with 'database.py'."
+    ) from e
 
 target_metadata = Base.metadata
 
-def get_sync_database_url():
-    """Convert asyncpg URL to sync psycopg2 URL for Alembic."""
-    url = os.getenv("DATABASE_URL", settings.DATABASE_URL)
-    # Replace asyncpg scheme with standard postgresql
-    if url.startswith("postgresql+asyncpg://"):
-        url = url.replace("postgresql+asyncpg://", "postgresql://")
-    # Ensure SSL mode if needed (for Railway public proxy)
-    if "?sslmode=require" not in url and "crossover.proxy.rlwy.net" in url:
-        url += "?sslmode=require"
-    return url
+# Alembic Config object
+config = context.config
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
 
-def run_migrations_offline():
-    url = get_sync_database_url()
+def run_migrations_offline() -> None:
+    url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -40,21 +40,23 @@ def run_migrations_offline():
     with context.begin_transaction():
         context.run_migrations()
 
-def run_migrations_online():
-    configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = get_sync_database_url()
-    connectable = engine_from_config(
-        configuration,
+def do_run_migrations(connection: Connection) -> None:
+    context.configure(connection=connection, target_metadata=target_metadata)
+    with context.begin_transaction():
+        context.run_migrations()
+
+async def run_async_migrations() -> None:
+    connectable = async_engine_from_config(
+        config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata
-        )
-        with context.begin_transaction():
-            context.run_migrations()
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
+    await connectable.dispose()
+
+def run_migrations_online() -> None:
+    asyncio.run(run_async_migrations())
 
 if context.is_offline_mode():
     run_migrations_offline()
