@@ -14,8 +14,8 @@ try:
     from app.database import engine, Base
     from app.config import settings
     from app.routers import (
-        auth, users, pens, production, dashboard, analytics,
-        eggs, feed, trays, reports, notifications, alerts,
+        auth, pens, production, dashboard, analytics,
+        eggs, feed, reports, notifications, alerts,
         subscription, payments, blocks, farms
     )
 except Exception:
@@ -96,8 +96,8 @@ app.mount(
 # Routers
 # ------------------------------------------------------------------
 routers_list = [
-    auth, users, pens, production, dashboard, analytics,
-    eggs, feed, trays, reports, notifications, alerts,
+    auth, pens, production, dashboard, analytics,
+    eggs, feed, reports, notifications, alerts,
     subscription, payments, blocks
 ]
 

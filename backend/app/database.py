@@ -10,13 +10,13 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # Fallback for local development
 if not DATABASE_URL:
-    DATABASE_URL = "postgresql+asyncpg://postgres:FHQrVwNpuBlLawhyCMFHUeaVURFyHYXQ@postgres.railway.internal:5432/railway"
+    DATABASE_URL = "postgresql+asyncpg://postgres:password@localhost:5432/smartpoultry"
 
 # ------------------------------------------------------------------
-# FIX: Strip ALL query parameters and pass ssl=True to engine
+# FIX: Strip ALL query parameters (including sslmode)
 # ------------------------------------------------------------------
 def fix_postgres_url(url: str) -> str:
-    """Remove ALL query parameters and ensure asyncpg driver."""
+    """Remove ALL query parameters to prevent sslmode being passed to asyncpg."""
     parsed = urlparse(url)
     
     # Strip ALL query parameters
@@ -30,9 +30,6 @@ def fix_postgres_url(url: str) -> str:
 
 DATABASE_URL = fix_postgres_url(DATABASE_URL)
 
-# Debug: remove after confirming fix
-print(f"Final DATABASE_URL: {DATABASE_URL}")
-
 # ------------------------------------------------------------------
 # SQLAlchemy Engine Configuration
 # ------------------------------------------------------------------
@@ -42,7 +39,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
-    connect_args={"ssl": True},
+    connect_args={"ssl": True},  # SSL handled here, not in URL
 )
 
 # ------------------------------------------------------------------

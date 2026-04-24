@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Database (Railway auto-injects DATABASE_URL)
     # ------------------------------------------------------------------
-    DATABASE_URL: str
+    DATABASE_URL: str = ""
 
     # ------------------------------------------------------------------
     # File Uploads
@@ -33,10 +33,15 @@ class Settings(BaseSettings):
     def cors_origins(self) -> List[str]:
         default_origins = [
             "http://localhost:3000",
+            "http://localhost:3001",
             "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
             "http://192.168.1.133:3000",
-            "http://192.168.1.133",
             "http://192.168.1.133:8000",
+            "http://192.168.1.170:3000",
+            "http://192.168.1.170:8000",
         ]
 
         env_origins = []
