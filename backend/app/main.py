@@ -3,9 +3,6 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-# ------------------------------------------------------------------
-# Top-level exception handler to catch import/startup errors
-# ------------------------------------------------------------------
 try:
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
@@ -19,14 +16,8 @@ try:
         subscription, payments, blocks, farms
     )
 
-    # ------------------------------------------------------------------
-    # IMPORT ALL MODELS so that Base.metadata knows about them
-    # ------------------------------------------------------------------
-    from app.models import (  # adjust the import path to your actual models
-        User, Farm, Pen, Production, Egg, Feed, Report,
-        Notification, Alert, Subscription, Payment, Block
-        # Add all your model classes here
-    )
+    # Import all models (do not list individual names)
+    from app import models
 
 except Exception:
     print("=" * 80)
@@ -36,6 +27,7 @@ except Exception:
     traceback.print_exc()
     sys.exit(1)
 
+# ... rest of your code unchanged (logging, lifespan, app, etc.)
 # ------------------------------------------------------------------
 # Logging Configuration
 # ------------------------------------------------------------------
