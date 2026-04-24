@@ -14,7 +14,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # Fallback for local development
 if not DATABASE_URL:
-    DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/pacificfarm"
+    DATABASE_URL = "postgresql://postgres:FHQrVwNpuBlLawhyCMFHUeaVURFyHYXQ@postgres.railway.internal:5432/railway"
 
 # ------------------------------------------------------------------
 # Strip ALL query parameters (sslmode, etc.)
