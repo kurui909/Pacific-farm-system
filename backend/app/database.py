@@ -55,9 +55,6 @@ engine = create_async_engine(
     max_overflow=10,
 )
 
-# ...
-# (rest of your code unchanged: AsyncSessionLocal, Base, get_db)
-
 # ------------------------------------------------------------------
 # Session Factory
 # ------------------------------------------------------------------
