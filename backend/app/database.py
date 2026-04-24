@@ -1,5 +1,5 @@
 import os
-from urllib.parse import urlparse, parse_qs, urlunparse, quote
+from urllib.parse import urlparse, urlunparse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 
@@ -13,27 +13,16 @@ if not DATABASE_URL:
     DATABASE_URL = "postgresql+asyncpg://postgres:FHQrVwNpuBlLawhyCMFHUeaVURFyHYXQ@postgres.railway.internal:5432/railway"
 
 # ------------------------------------------------------------------
-# FIX: Convert sslmode → ssl (asyncpg compatibility)
+# FIX: Strip ALL query parameters and pass ssl=True to engine
 # ------------------------------------------------------------------
 def fix_postgres_url(url: str) -> str:
-    """Replace sslmode query parameter with ssl, and ensure asyncpg driver."""
+    """Remove ALL query parameters and ensure asyncpg driver."""
     parsed = urlparse(url)
     
-    # 1. Convert sslmode → ssl in query string
-    if parsed.query:
-        query_params = parse_qs(parsed.query, keep_blank_values=True)
-        if "sslmode" in query_params:
-            ssl_value = query_params["sslmode"][0]
-            # Remove sslmode and add ssl
-            del query_params["sslmode"]
-            # Only add ssl if value is truthy (e.g., 'require', 'prefer')
-            if ssl_value:
-                query_params["ssl"] = [ssl_value]
-            # Rebuild query string (URL-encode values)
-            new_query = "&".join(f"{k}={quote(v[0])}" for k, v in query_params.items())
-            parsed = parsed._replace(query=new_query)
+    # Strip ALL query parameters
+    parsed = parsed._replace(query="")
     
-    # 2. Ensure asyncpg driver is used
+    # Ensure asyncpg driver is used
     if parsed.scheme.startswith("postgresql") and "+asyncpg" not in parsed.scheme:
         parsed = parsed._replace(scheme="postgresql+asyncpg")
     
@@ -53,6 +42,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
+    connect_args={"ssl": True},
 )
 
 # ------------------------------------------------------------------
