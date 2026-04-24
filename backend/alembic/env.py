@@ -4,27 +4,27 @@ from pathlib import Path
 from logging.config import fileConfig
 
 from sqlalchemy import pool
-from sqlalchemy.engine import Connection
+from sqlchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
-# Add the project root to Python path so 'app' module can be found
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add the 'backend' directory to Python path (since 'app' is inside it)
+backend_dir = Path(__file__).parent.parent   # this is the 'backend' folder
+sys.path.insert(0, str(backend_dir))
 
-# Import your Base and models (adjust paths if needed)
+# Now import your Base and models from the 'app' package
 try:
     from app.database import Base
-    from app import models   # this ensures all models are registered
+    from app import models   # ensures all models are registered
 except ModuleNotFoundError as e:
     raise ImportError(
-        "Could not import 'app.database.Base'. Make sure you run alembic from the project root "
-        "and that your project structure has an 'app' package with 'database.py'."
+        "Could not import 'app.database.Base'. Make sure your project has a 'backend/app' folder "
+        "with 'database.py' and 'models.py' (or __init__.py with models)."
     ) from e
 
 target_metadata = Base.metadata
 
-# Alembic Config object
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
