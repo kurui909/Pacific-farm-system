@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useMutation } from '@tanstack/react-query';
 
 const rawApiUrl =
-  process.env.REACT_APP_API_URL || 'http://192.168.1.133:8000';
+  process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const API_PREFIX = '/api/v1';
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
@@ -32,7 +32,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      window.location.href = `${process.env.PUBLIC_URL || ''}/login`;
     }
     return Promise.reject(error);
   }
