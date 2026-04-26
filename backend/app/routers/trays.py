@@ -11,11 +11,16 @@ from app.dependencies import get_current_farm, get_current_user, require_active_
 
 router = APIRouter(prefix="/trays", tags=["trays"])
 
-@router.get("/inventory", response_model=TrayInventoryResponse)
+@router.get("/inventory", response_model=List[TrayInventoryResponse])
 async def get_inventory(db: AsyncSession = Depends(get_db), farm: Farm = Depends(get_current_farm)):
-    result = await db.execute(select(TrayInventory).where(TrayInventory.farm_id == farm.id).order_by(TrayInventory.date.desc()).limit(1))
-    inv = result.scalar_one_or_none()
-    return inv or TrayInventory(id=0, opening_stock=0, received=0, sold=0, closing_stock=0)
+    """Get all tray inventory records for the current farm"""
+    result = await db.execute(
+        select(TrayInventory)
+        .where(TrayInventory.farm_id == farm.id)
+        .order_by(TrayInventory.date.desc())
+    )
+    inventories = result.scalars().all()
+    return inventories if inventories else []
 
 @router.get("/sales", response_model=List[TraySaleResponse])
 async def get_sales(
@@ -23,6 +28,7 @@ async def get_sales(
     farm: Farm = Depends(get_current_farm),
     _: Farm = Depends(require_active_subscription),
 ):
+    """Get all tray sales for the current farm"""
     result = await db.execute(
         select(TraySale).where(TraySale.farm_id == farm.id).order_by(TraySale.sale_date.desc())
     )
@@ -37,6 +43,7 @@ async def record_sale(
     farm: Farm = Depends(get_current_farm),
     _: Farm = Depends(require_active_subscription),
 ):
+    """Record a new tray sale"""
     total = data.trays * data.price_per_tray
     sale = TraySale(
         **data.model_dump(),
@@ -46,6 +53,7 @@ async def record_sale(
     )
     db.add(sale)
 
+    # Update inventory
     latest = (
         await db.execute(
             select(TrayInventory)
@@ -61,6 +69,8 @@ async def record_sale(
         received=0,
         sold=data.trays,
         closing_stock=(latest.closing_stock if latest else 0) - data.trays,
+        quantity=(latest.closing_stock if latest else 0) - data.trays,
+        condition="good",
     )
     db.add(new_inv)
     db.add(
@@ -84,12 +94,15 @@ async def update_inventory(
     farm: Farm = Depends(get_current_farm),
     _: Farm = Depends(require_active_subscription),
 ):
+    """Update tray inventory"""
     inventory = TrayInventory(
         farm_id=farm.id,
         opening_stock=data.opening_stock,
         received=data.received,
         sold=data.sold,
         closing_stock=data.closing_stock,
+        quantity=data.quantity if hasattr(data, 'quantity') else data.closing_stock,
+        condition=data.condition if hasattr(data, 'condition') else "good",
     )
     db.add(inventory)
     await db.commit()

@@ -1,133 +1,50 @@
-import sys
-import logging
-import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-# ------------------------------------------------------------------
-# Top-level exception handler to catch import/startup errors
-# ------------------------------------------------------------------
-try:
-    from fastapi import FastAPI
-    from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.staticfiles import StaticFiles
-
-    from app.database import engine, Base
-    from app.config import settings
-    from app.routers import (
-        auth, pens, production, dashboard, analytics,
-        eggs, feed, reports, notifications, alerts,
-        subscription, payments, blocks, farms
-    )
-
-    # ✅ Import all models (this registers every table with Base.metadata)
-    from app import models
-
-except Exception as e:
-    print("=" * 80)
-    print("CRITICAL: Failed to import required modules during startup")
-    print("=" * 80)
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-
-# ------------------------------------------------------------------
-# Logging Configuration
-# ------------------------------------------------------------------
-logging.basicConfig(
-    stream=sys.stdout,
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+# Import routers
+from app.routers import (
+    auth, users, pens, production, dashboard, analytics,
+    eggs, feed, trays, reports, notifications, alerts,
+    subscription, payments, blocks, farms
 )
-logger = logging.getLogger("smartpoultry")
 
-# ------------------------------------------------------------------
-# Lifespan (startup + shutdown)
-# ------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 Starting SmartPoultry API...")
-
-    try:
-        # Create tables if they don't exist (safe for all environments)
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("✅ Database tables verified/created.")
-
-    except Exception:
-        logger.exception("❌ FATAL: Startup failed.")
-        raise
-
+    print("🚀 Starting SmartPoultry API...")
     yield
+    print("🛑 Shutting down SmartPoultry API...")
 
-    logger.info("🛑 Shutting down SmartPoultry API...")
+# Create FastAPI app
+app = FastAPI(title="SmartPoultry API", version="1.0.0", lifespan=lifespan)
 
-# ------------------------------------------------------------------
-# App Initialization
-# ------------------------------------------------------------------
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.VERSION,
-    lifespan=lifespan
-)
-
-# ------------------------------------------------------------------
-# CORS
-# ------------------------------------------------------------------
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ------------------------------------------------------------------
-# Static Files (Uploads)
-# ------------------------------------------------------------------
-UPLOAD_DIR = settings.UPLOAD_DIR or "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# Include routers
+app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
+app.include_router(users.router, prefix="/api/v1", tags=["users"])
+app.include_router(pens.router, prefix="/api/v1", tags=["pens"])
+app.include_router(production.router, prefix="/api/v1", tags=["production"])
+app.include_router(dashboard.router, prefix="/api/v1", tags=["dashboard"])
+app.include_router(analytics.router, prefix="/api/v1", tags=["analytics"])
+app.include_router(eggs.router, prefix="/api/v1", tags=["eggs"])
+app.include_router(feed.router, prefix="/api/v1", tags=["feed"])
+app.include_router(trays.router, prefix="/api/v1", tags=["trays"])
+app.include_router(reports.router, prefix="/api/v1", tags=["reports"])
+app.include_router(notifications.router, prefix="/api/v1", tags=["notifications"])
+app.include_router(alerts.router, prefix="/api/v1", tags=["alerts"])
+app.include_router(subscription.router, prefix="/api/v1", tags=["subscription"])
+app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
+app.include_router(blocks.router, prefix="/api/v1", tags=["blocks"])
+app.include_router(farms.router, prefix="/api/v1", tags=["farms"])
 
-app.mount(
-    "/uploads",
-    StaticFiles(directory=UPLOAD_DIR),
-    name="uploads"
-)
-
-# ------------------------------------------------------------------
-# Routers
-# ------------------------------------------------------------------
-routers_list = [
-    auth, pens, production, dashboard, analytics,
-    eggs, feed, reports, notifications, alerts,
-    subscription, payments, blocks
-]
-
-for router_module in routers_list:
-    app.include_router(
-        router_module.router,
-        prefix=settings.API_V1_STR
-    )
-
-# Farms (separate tagging)
-app.include_router(
-    farms.router,
-    prefix=f"{settings.API_V1_STR}/farms",
-    tags=["farms"]
-)
-
-# ------------------------------------------------------------------
-# Root & Health
-# ------------------------------------------------------------------
 @app.get("/")
-async def root():
-    return {
-        "message": "SmartPoultry API",
-        "version": settings.VERSION
-    }
-
-@app.get("/health")
-async def health():
-    return {
-        "status": "ok",
-        "service": "smartpoultry"
-    }
+def root():
+    return {"message": "SmartPoultry API is running!"}

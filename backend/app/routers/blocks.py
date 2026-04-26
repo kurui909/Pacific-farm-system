@@ -1,56 +1,99 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from pydantic import BaseModel
 from typing import List
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.database import get_db
-from app.models import Block, Farm, Pen
-from app.schemas import BlockCreate, BlockUpdate, BlockResponse
-from app.dependencies import get_current_farm, require_active_subscription
+from app.models import Farm, Block, Pen
+from app.schemas import BlockCreate, BlockUpdate, BlockResponse, BlockAssignment, BlockPenAction
+from app.dependencies import get_current_farm, get_current_user
 
 router = APIRouter(prefix="/blocks", tags=["blocks"])
 
-class AssignPensRequest(BaseModel):
-    pen_ids: List[int]
-
-@router.get("/", response_model=list[BlockResponse])
+@router.get("", response_model=List[BlockResponse])
 async def get_blocks(
     db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
+    farm: Farm = Depends(get_current_farm)
 ):
+    """Get all blocks for the current farm"""
     result = await db.execute(
-        select(Block).where(Block.farm_id == farm.id).order_by(Block.name)
+        select(Block).where(Block.farm_id == farm.id).order_by(Block.created_at.desc())
     )
     blocks = result.scalars().all()
-    return blocks
+    
+    # Convert to response format with proper field mapping
+    response_blocks = []
+    for block in blocks:
+        response_blocks.append(BlockResponse(
+            id=block.id,
+            name=block.name,
+            farm_id=block.farm_id,
+            created_at=block.created_at,
+            updated_at=block.updated_at
+        ))
+    
+    return response_blocks
 
-@router.post("/", response_model=BlockResponse, status_code=status.HTTP_201_CREATED)
-async def create_block(
-    block_data: BlockCreate,
+@router.get("/{block_id}", response_model=BlockResponse)
+async def get_block(
+    block_id: int,
     db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
-    _ = Depends(require_active_subscription),
+    farm: Farm = Depends(get_current_farm)
 ):
+    """Get a specific block by ID"""
+    result = await db.execute(
+        select(Block).where(Block.id == block_id, Block.farm_id == farm.id)
+    )
+    block = result.scalar_one_or_none()
+    if not block:
+        raise HTTPException(status_code=404, detail="Block not found")
+    
+    return BlockResponse(
+        id=block.id,
+        name=block.name,
+        farm_id=block.farm_id,
+        created_at=block.created_at,
+        updated_at=block.updated_at
+    )
+
+@router.post("", response_model=BlockResponse)
+async def create_block(
+    data: BlockCreate,
+    db: AsyncSession = Depends(get_db),
+    farm: Farm = Depends(get_current_farm)
+):
+    """Create a new block"""
+    # Check if block with same name exists
     existing = await db.execute(
-        select(Block).where(Block.farm_id == farm.id, Block.name == block_data.name)
+        select(Block).where(Block.farm_id == farm.id, Block.name == data.name)
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Block with this name already exists")
     
-    block = Block(name=block_data.name, farm_id=farm.id)
+    block = Block(
+        name=data.name,
+        farm_id=farm.id
+    )
     db.add(block)
     await db.commit()
     await db.refresh(block)
-    return block
+    
+    return BlockResponse(
+        id=block.id,
+        name=block.name,
+        farm_id=block.farm_id,
+        created_at=block.created_at,
+        updated_at=block.updated_at
+    )
 
 @router.put("/{block_id}", response_model=BlockResponse)
 async def update_block(
     block_id: int,
-    block_data: BlockUpdate,
+    data: BlockUpdate,
     db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
-    _ = Depends(require_active_subscription),
+    farm: Farm = Depends(get_current_farm)
 ):
+    """Update a block"""
     result = await db.execute(
         select(Block).where(Block.id == block_id, Block.farm_id == farm.id)
     )
@@ -58,25 +101,27 @@ async def update_block(
     if not block:
         raise HTTPException(status_code=404, detail="Block not found")
     
-    if block_data.name is not None:
-        duplicate = await db.execute(
-            select(Block).where(Block.farm_id == farm.id, Block.name == block_data.name, Block.id != block_id)
-        )
-        if duplicate.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail="Block name already exists")
-        block.name = block_data.name
+    if data.name is not None:
+        block.name = data.name
     
     await db.commit()
     await db.refresh(block)
-    return block
+    
+    return BlockResponse(
+        id=block.id,
+        name=block.name,
+        farm_id=block.farm_id,
+        created_at=block.created_at,
+        updated_at=block.updated_at
+    )
 
-@router.delete("/{block_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{block_id}")
 async def delete_block(
     block_id: int,
     db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
-    _ = Depends(require_active_subscription),
+    farm: Farm = Depends(get_current_farm)
 ):
+    """Delete a block"""
     result = await db.execute(
         select(Block).where(Block.id == block_id, Block.farm_id == farm.id)
     )
@@ -84,42 +129,43 @@ async def delete_block(
     if not block:
         raise HTTPException(status_code=404, detail="Block not found")
     
-    await db.execute(
-        Pen.__table__.update().where(Pen.block_id == block_id).values(block_id=None)
+    # Check if block has pens
+    pens = await db.execute(
+        select(Pen).where(Pen.block_id == block_id)
     )
+    if pens.scalars().first():
+        raise HTTPException(status_code=400, detail="Cannot delete block with assigned pens")
+    
     await db.delete(block)
     await db.commit()
+    
+    return {"message": "Block deleted successfully"}
 
-@router.post("/{block_id}/assign-pens", status_code=status.HTTP_200_OK)
+@router.post("/{block_id}/assign-pens")
 async def assign_pens_to_block(
     block_id: int,
-    request: AssignPensRequest,
+    data: BlockAssignment,
     db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
-    _ = Depends(require_active_subscription),
+    farm: Farm = Depends(get_current_farm)
 ):
-    pen_ids = request.pen_ids
-    if not pen_ids:
-        raise HTTPException(status_code=400, detail="No pen IDs provided")
-    
+    """Assign pens to a block"""
     # Verify block exists
     block_result = await db.execute(
         select(Block).where(Block.id == block_id, Block.farm_id == farm.id)
     )
-    if not block_result.scalar_one_or_none():
+    block = block_result.scalar_one_or_none()
+    if not block:
         raise HTTPException(status_code=404, detail="Block not found")
     
-    # Verify each pen belongs to farm and is not already in another block? (optional)
-    for pen_id in pen_ids:
+    # Update pens
+    for pen_id in data.pen_ids:
         pen_result = await db.execute(
             select(Pen).where(Pen.id == pen_id, Pen.farm_id == farm.id)
         )
-        if not pen_result.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail=f"Pen {pen_id} not found in this farm")
+        pen = pen_result.scalar_one_or_none()
+        if pen:
+            pen.block_id = block_id
     
-    # Assign pens
-    await db.execute(
-        Pen.__table__.update().where(Pen.id.in_(pen_ids)).values(block_id=block_id)
-    )
     await db.commit()
-    return {"message": f"{len(pen_ids)} pen(s) assigned to block"}
+    
+    return {"message": f"Assigned {len(data.pen_ids)} pens to block {block.name}"}

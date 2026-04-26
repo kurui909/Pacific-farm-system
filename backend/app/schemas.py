@@ -143,8 +143,8 @@ class ProductionResponse(BaseModel):
     recorded_by_id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    pen_name: Optional[str] = None      # Added for frontend
-    block_name: Optional[str] = None    # Added for frontend
+    pen_name: Optional[str] = None
+    block_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -198,7 +198,7 @@ class BlockPenAction(BaseModel):
     pen_id: int
 
 
-# ===== Environment Schemas (for real-time data) =====
+# ===== Environment Schemas =====
 
 class EnvironmentCreate(BaseModel):
     pen_id: int
@@ -228,7 +228,7 @@ class MortalityRecord(BaseModel):
     notes: Optional[str] = None
 
 
-# ===== Pen Latest Production (for summary) =====
+# ===== Pen Latest Production =====
 
 class PenLatestProduction(BaseModel):
     pen_id: int
@@ -236,7 +236,7 @@ class PenLatestProduction(BaseModel):
     date: date
 
 
-# ===== Pen Schemas (updated with block_name) =====
+# ===== Pen Schemas =====
 
 class PenCreate(BaseModel):
     name: str
@@ -251,7 +251,6 @@ class PenCreate(BaseModel):
     capacity: int
     notes: Optional[str] = None
     block_id: Optional[int] = None
-    # Deep Litter
     floor_area_sq_m: Optional[float] = None
     max_density: Optional[float] = None
     litter_type: Optional[str] = "wood_shavings"
@@ -259,7 +258,6 @@ class PenCreate(BaseModel):
     waterer_count: Optional[int] = None
     nest_count: Optional[int] = None
     perch_length_cm: Optional[int] = None
-    # Cage
     cell_length_mm: Optional[int] = None
     cell_width_mm: Optional[int] = None
     cell_height_mm: Optional[int] = None
@@ -336,6 +334,10 @@ class PenResponse(BaseModel):
 # ===== Egg Schemas =====
 
 class EggInventoryUpdate(BaseModel):
+    opening_stock: Optional[int] = None
+    sold: Optional[int] = None
+    rejects: Optional[int] = None
+    breakages: Optional[int] = None
     good_eggs: Optional[int] = None
     damaged_eggs: Optional[int] = None
     small_eggs: Optional[int] = None
@@ -347,13 +349,20 @@ class EggInventoryUpdate(BaseModel):
 class EggInventoryResponse(BaseModel):
     id: int
     farm_id: int
-    good_eggs: int
-    damaged_eggs: int
-    small_eggs: int
-    double_yolk_eggs: int
-    soft_shell_eggs: int
-    shells: int
-    created_at: datetime
+    date: Optional[datetime] = None
+    opening_stock: int = 0
+    received: int = 0
+    sold: int = 0
+    rejects: int = 0
+    breakages: int = 0
+    closing_stock: int = 0
+    good_eggs: int = 0
+    damaged_eggs: int = 0
+    small_eggs: int = 0
+    double_yolk_eggs: int = 0
+    soft_shell_eggs: int = 0
+    shells: int = 0
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     class Config:
@@ -361,22 +370,24 @@ class EggInventoryResponse(BaseModel):
 
 
 class TraySaleCreate(BaseModel):
-    tray_id: int
-    quantity: int
+    customer_name: str
+    trays: int
     price_per_tray: float
-    buyer_name: str
+    sale_date: date
     notes: Optional[str] = None
 
 
 class TraySaleResponse(BaseModel):
     id: int
-    tray_id: int
-    quantity: int
+    customer_name: str
+    trays: int
     price_per_tray: float
     total_price: float
-    buyer_name: str
-    notes: Optional[str] = None
+    sale_date: datetime
+    farm_id: int
+    recorded_by_id: int
     created_at: datetime
+    currency: Optional[str] = "USD"
 
     class Config:
         from_attributes = True
@@ -455,6 +466,10 @@ class FeedMixResponse(BaseModel):
 # ===== Tray Schemas =====
 
 class TrayInventoryUpdate(BaseModel):
+    opening_stock: Optional[int] = None
+    received: Optional[int] = None
+    sold: Optional[int] = None
+    closing_stock: Optional[int] = None
     quantity: Optional[int] = None
     condition: Optional[str] = None
 
@@ -462,9 +477,14 @@ class TrayInventoryUpdate(BaseModel):
 class TrayInventoryResponse(BaseModel):
     id: int
     farm_id: int
-    quantity: int
-    condition: str
-    created_at: datetime
+    date: Optional[datetime] = None
+    opening_stock: int = 0
+    received: int = 0
+    sold: int = 0
+    closing_stock: int = 0
+    quantity: int = 0
+    condition: str = "good"
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     class Config:

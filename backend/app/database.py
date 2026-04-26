@@ -1,46 +1,45 @@
-import os
-import ssl
-from urllib.parse import urlparse, urlunparse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
-
+from sqlalchemy.pool import NullPool
 from app.config import settings
+from urllib.parse import quote_plus
+from uuid import uuid4
 
-DATABASE_URL = settings.DATABASE_URL
-
-def fix_postgres_url(url: str) -> str:
-    """Remove ALL query parameters to prevent sslmode being passed to asyncpg."""
-    parsed = urlparse(url)
-    parsed = parsed._replace(query="")
-    if parsed.scheme.startswith("postgresql") and "+asyncpg" not in parsed.scheme:
-        parsed = parsed._replace(scheme="postgresql+asyncpg")
-    return urlunparse(parsed)
-
-DATABASE_URL = fix_postgres_url(DATABASE_URL)
-
-# Create an SSL context that does not verify certificates (for self-signed certs)
-ssl_context = ssl.create_default_context()
-ssl_context.check_hostname = False
-ssl_context.verify_mode = ssl.CERT_NONE
-
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10,
-    connect_args={"ssl": ssl_context},
+# Build asyncpg URL WITHOUT sslmode in URL
+# ssl will be handled via connect_args
+ASYNC_DATABASE_URL = (
+    f"postgresql+asyncpg://{settings.DB_USER}:{quote_plus(settings.DB_PASSWORD)}"
+    f"@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
 )
 
-AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+# Create async engine with proper SSL configuration
+engine = create_async_engine(
+    ASYNC_DATABASE_URL,
+    echo=False,
+    future=True,
+    poolclass=NullPool,
+    connect_args={
+        "ssl": "require",  # Use 'ssl' instead of 'sslmode' for asyncpg
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+        "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4()}__",
+        "server_settings": {
+            "jit": "off",
+        },
+    },
+)
+
+# Session factory
+AsyncSessionLocal = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+# Base class for SQLAlchemy models
 Base = declarative_base()
 
+# Dependency to get DB session
 async def get_db():
     async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+        yield session

@@ -204,6 +204,16 @@ class EggInventory(Base):
     rejects = Column(Integer, default=0)
     breakages = Column(Integer, default=0)
     closing_stock = Column(Integer, default=0)
+    # ADDED MISSING FIELDS
+    good_eggs = Column(Integer, default=0)
+    damaged_eggs = Column(Integer, default=0)
+    small_eggs = Column(Integer, default=0)
+    double_yolk_eggs = Column(Integer, default=0)
+    soft_shell_eggs = Column(Integer, default=0)
+    shells = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+    
     farm = relationship("Farm", back_populates="egg_inventory", foreign_keys="EggInventory.farm_id")
 
 
@@ -265,6 +275,12 @@ class TrayInventory(Base):
     received = Column(Integer, default=0)
     sold = Column(Integer, default=0)
     closing_stock = Column(Integer, default=0)
+    # ADDED MISSING FIELDS
+    quantity = Column(Integer, default=0)
+    condition = Column(String, default="good")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+    
     farm = relationship("Farm", back_populates="tray_inventory", foreign_keys="TrayInventory.farm_id")
 
 

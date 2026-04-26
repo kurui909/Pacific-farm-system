@@ -1,355 +1,394 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, desc
 from typing import List, Optional
-from datetime import date, datetime, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select, desc, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, date, timedelta
 
-from app.models import ProductionRecord, Pen, Farm, Block
-import app.schemas as schema
-from app.dependencies import get_db, get_current_farm, require_active_subscription, get_current_user
+from app.database import get_db
+from app.models import Farm, ProductionRecord, Pen, User
+from app.schemas import (
+    ProductionCreate, ProductionUpdate, ProductionResponse,
+    BatchProductionCreate, PenLatestProduction
+)
+from app.dependencies import get_current_farm, get_current_user, require_active_subscription
 
 router = APIRouter(prefix="/production", tags=["production"])
 
-
-# ---------- Helper to enrich production record with pen name and block name ----------
-async def enrich_production_record(db: AsyncSession, record):
-    """Attach pen_name and block_name to a production record."""
-    pen_result = await db.execute(select(Pen).where(Pen.id == record.pen_id))
-    pen = pen_result.scalar_one_or_none()
-    if pen:
-        record.pen_name = pen.name
-        if pen.block_id:
-            block_result = await db.execute(select(Block).where(Block.id == pen.block_id))
-            block = block_result.scalar_one_or_none()
-            record.block_name = block.name if block else None
-        else:
-            record.block_name = None
-    else:
-        record.pen_name = None
-        record.block_name = None
-    return record
-
-
-# ---------- Main CRUD ----------
-@router.get("/", response_model=List[schema.ProductionResponse])
-async def get_production(
+@router.get("", response_model=List[ProductionResponse])
+async def get_production_records(
     db: AsyncSession = Depends(get_db),
     farm: Farm = Depends(get_current_farm),
-    _: Farm = Depends(require_active_subscription),
-    pen_id: Optional[int] = Query(None),
-    start_date: Optional[date] = Query(None),
-    end_date: Optional[date] = Query(None),
-    search: Optional[str] = Query(None),
+    pen_id: Optional[int] = Query(None, description="Filter by pen ID"),
+    start_date: Optional[date] = Query(None, description="Start date filter"),
+    end_date: Optional[date] = Query(None, description="End date filter"),
+    limit: int = Query(100, description="Limit results"),
+    offset: int = Query(0, description="Offset for pagination")
 ):
-    """Get production records with optional filters (pen, date range, search by staff or pen name)"""
-    stmt = select(ProductionRecord).where(ProductionRecord.farm_id == farm.id)
+    """Get production records with optional filters"""
+    query = select(ProductionRecord).where(ProductionRecord.farm_id == farm.id)
     
     if pen_id:
-        stmt = stmt.where(ProductionRecord.pen_id == pen_id)
+        query = query.where(ProductionRecord.pen_id == pen_id)
+    
     if start_date:
-        stmt = stmt.where(ProductionRecord.date >= start_date)
+        query = query.where(ProductionRecord.date >= start_date)
+    
     if end_date:
-        stmt = stmt.where(ProductionRecord.date <= end_date)
-    if search:
-        # Search by staff name or pen name (join Pen)
-        stmt = stmt.join(Pen, Pen.id == ProductionRecord.pen_id).where(
-            Pen.name.ilike(f"%{search}%") | ProductionRecord.staff_name.ilike(f"%{search}%")
-        )
+        query = query.where(ProductionRecord.date <= end_date)
     
-    result = await db.execute(stmt.order_by(desc(ProductionRecord.date)))
+    query = query.order_by(desc(ProductionRecord.date)).offset(offset).limit(limit)
+    
+    result = await db.execute(query)
     records = result.scalars().all()
     
-    # Enrich each record with pen name and block name
-    enriched = []
-    for rec in records:
-        enriched.append(await enrich_production_record(db, rec))
-    return enriched
+    # Convert to response format with pen names
+    response_records = []
+    for record in records:
+        # Get pen name
+        pen_result = await db.execute(select(Pen).where(Pen.id == record.pen_id))
+        pen = pen_result.scalar_one_or_none()
+        
+        response_records.append(ProductionResponse(
+            id=record.id,
+            date=record.date,
+            pen_id=record.pen_id,
+            farm_id=record.farm_id,
+            age_days=record.age_days,
+            week_number=record.week_number,
+            opening_stock=record.opening_stock,
+            closing_stock=record.closing_stock,
+            mortality=record.mortality,
+            feed_kg=record.feed_kg,
+            good_eggs=record.good_eggs or 0,
+            damaged_eggs=record.damaged_eggs or 0,
+            small_eggs=record.small_eggs or 0,
+            double_yolk_eggs=record.double_yolk_eggs or 0,
+            soft_shell_eggs=record.soft_shell_eggs or 0,
+            shells=record.shells or 0,
+            broody_hen=record.broody_hen or 0,
+            culls=record.culls or 0,
+            staff_name=record.staff_name,
+            image_url=record.image_url,
+            total_eggs=record.total_eggs,
+            hd_percentage=record.hd_percentage,
+            er_ratio=record.er_ratio,
+            recorded_by_id=record.recorded_by_id,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+            pen_name=pen.name if pen else None,
+            block_name=pen.block_rel.name if pen and pen.block_rel else None
+        ))
+    
+    return response_records
 
-
-@router.get("/pens/{pen_id}", response_model=List[schema.ProductionResponse])
-async def get_pen_production(
-    pen_id: int,
+@router.get("/previous", response_model=Optional[ProductionResponse])
+async def get_previous_record(
+    pen_id: int = Query(..., description="Pen ID"),
+    date: date = Query(..., description="Current date"),
     db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
-    _: Farm = Depends(require_active_subscription),
+    farm: Farm = Depends(get_current_farm)
 ):
-    """Get production records for a specific pen (last 30 records)"""
-    stmt = (
+    """Get the previous day's production record for a pen"""
+    prev_date = date - timedelta(days=1)
+    
+    result = await db.execute(
         select(ProductionRecord)
-        .where(ProductionRecord.pen_id == pen_id, ProductionRecord.farm_id == farm.id)
-        .order_by(desc(ProductionRecord.date))
-        .limit(30)
+        .where(
+            ProductionRecord.pen_id == pen_id,
+            ProductionRecord.farm_id == farm.id,
+            func.date(ProductionRecord.date) == prev_date
+        )
     )
-    result = await db.execute(stmt)
-    records = result.scalars().all()
-    enriched = []
-    for rec in records:
-        enriched.append(await enrich_production_record(db, rec))
-    return enriched
-
-
-@router.get("/{record_id}", response_model=schema.ProductionResponse)
-async def get_production_record(
-    record_id: int,
-    db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
-    _: Farm = Depends(require_active_subscription),
-):
-    """Get a single production record"""
-    stmt = select(ProductionRecord).where(
-        ProductionRecord.id == record_id, ProductionRecord.farm_id == farm.id
-    )
-    result = await db.execute(stmt)
     record = result.scalar_one_or_none()
+    
     if not record:
-        raise HTTPException(status_code=404, detail="Production record not found")
-    return await enrich_production_record(db, record)
+        return None
+    
+    # Get pen name
+    pen_result = await db.execute(select(Pen).where(Pen.id == record.pen_id))
+    pen = pen_result.scalar_one_or_none()
+    
+    return ProductionResponse(
+        id=record.id,
+        date=record.date,
+        pen_id=record.pen_id,
+        farm_id=record.farm_id,
+        age_days=record.age_days,
+        week_number=record.week_number,
+        opening_stock=record.opening_stock,
+        closing_stock=record.closing_stock,
+        mortality=record.mortality,
+        feed_kg=record.feed_kg,
+        good_eggs=record.good_eggs or 0,
+        damaged_eggs=record.damaged_eggs or 0,
+        small_eggs=record.small_eggs or 0,
+        double_yolk_eggs=record.double_yolk_eggs or 0,
+        soft_shell_eggs=record.soft_shell_eggs or 0,
+        shells=record.shells or 0,
+        broody_hen=record.broody_hen or 0,
+        culls=record.culls or 0,
+        staff_name=record.staff_name,
+        image_url=record.image_url,
+        total_eggs=record.total_eggs,
+        hd_percentage=record.hd_percentage,
+        er_ratio=record.er_ratio,
+        recorded_by_id=record.recorded_by_id,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        pen_name=pen.name if pen else None,
+        block_name=pen.block_rel.name if pen and pen.block_rel else None
+    )
 
-
-@router.post("/", response_model=schema.ProductionResponse, status_code=201)
-async def create_production(
-    production: schema.ProductionCreate,
+@router.post("", response_model=ProductionResponse)
+async def create_production_record(
+    data: ProductionCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     farm: Farm = Depends(get_current_farm),
-    current_user=Depends(get_current_user),
-    _: Farm = Depends(require_active_subscription),
+    _: Farm = Depends(require_active_subscription)
 ):
-    """Create a single production record"""
-    pen = await db.get(Pen, production.pen_id)
-    if not pen or pen.farm_id != farm.id:
+    """Create a new production record"""
+    # Verify pen belongs to farm
+    pen_result = await db.execute(
+        select(Pen).where(Pen.id == data.pen_id, Pen.farm_id == farm.id)
+    )
+    pen = pen_result.scalar_one_or_none()
+    if not pen:
         raise HTTPException(status_code=404, detail="Pen not found")
     
-    total_eggs = production.total_eggs
+    # Calculate total eggs if not provided
+    total_eggs = data.total_eggs
     if total_eggs is None:
-        total_eggs = (
-            (production.good_eggs or 0) +
-            (production.damaged_eggs or 0) +
-            (production.small_eggs or 0) +
-            (production.double_yolk_eggs or 0) +
-            (production.soft_shell_eggs or 0) +
-            (production.shells or 0)
-        )
+        total_eggs = (data.good_eggs or 0) + (data.damaged_eggs or 0) + (data.small_eggs or 0) + \
+                     (data.double_yolk_eggs or 0) + (data.soft_shell_eggs or 0) + (data.shells or 0)
     
+    # Calculate HD percentage (Hen Day percentage)
     hd_percentage = None
-    if total_eggs > 0 and production.opening_stock:
-        hd_percentage = (total_eggs / production.opening_stock) * 100
+    if pen.current_birds and pen.current_birds > 0 and total_eggs:
+        hd_percentage = (total_eggs / pen.current_birds) * 100
     
+    # Calculate ER ratio (Egg to Feed ratio)
     er_ratio = None
-    if production.feed_kg and total_eggs > 0:
-        er_ratio = production.feed_kg / total_eggs
+    if data.feed_kg and data.feed_kg > 0 and total_eggs:
+        er_ratio = total_eggs / data.feed_kg
     
-    db_record = ProductionRecord(
+    record = ProductionRecord(
+        date=datetime.combine(data.date, datetime.min.time()),
+        pen_id=data.pen_id,
         farm_id=farm.id,
-        pen_id=production.pen_id,
-        date=production.date,
-        age_days=production.age_days,
-        week_number=production.week_number,
-        opening_stock=production.opening_stock,
-        closing_stock=production.closing_stock,
-        mortality=production.mortality,
-        feed_kg=production.feed_kg,
-        good_eggs=production.good_eggs or 0,
-        damaged_eggs=production.damaged_eggs or 0,
-        small_eggs=production.small_eggs or 0,
-        double_yolk_eggs=production.double_yolk_eggs or 0,
-        soft_shell_eggs=production.soft_shell_eggs or 0,
-        shells=production.shells or 0,
-        broody_hen=production.broody_hen or 0,
-        culls=production.culls or 0,
-        staff_name=production.staff_name,
-        image_url=production.image_url,
+        age_days=data.age_days,
+        week_number=data.week_number,
+        opening_stock=data.opening_stock,
+        closing_stock=data.closing_stock,
+        mortality=data.mortality,
+        feed_kg=data.feed_kg,
+        good_eggs=data.good_eggs or 0,
+        damaged_eggs=data.damaged_eggs or 0,
+        small_eggs=data.small_eggs or 0,
+        double_yolk_eggs=data.double_yolk_eggs or 0,
+        soft_shell_eggs=data.soft_shell_eggs or 0,
+        shells=data.shells or 0,
+        broody_hen=data.broody_hen or 0,
+        culls=data.culls or 0,
+        staff_name=data.staff_name,
+        image_url=data.image_url,
         total_eggs=total_eggs,
         hd_percentage=hd_percentage,
         er_ratio=er_ratio,
-        recorded_by_id=current_user.id,
+        recorded_by_id=current_user.id
     )
-    db.add(db_record)
+    
+    db.add(record)
     await db.commit()
-    await db.refresh(db_record)
-    return await enrich_production_record(db, db_record)
-
-
-@router.post("/batch", response_model=List[schema.ProductionResponse], status_code=201)
-async def create_batch_production(
-    batch: List[schema.BatchProductionCreate],
-    db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
-    current_user=Depends(get_current_user),
-    _: Farm = Depends(require_active_subscription),
-):
-    """Create multiple production records at once"""
-    records = []
+    await db.refresh(record)
     
-    for production in batch:
-        pen = await db.get(Pen, production.pen_id)
-        if not pen or pen.farm_id != farm.id:
-            raise HTTPException(status_code=404, detail=f"Pen {production.pen_id} not found")
-        
-        total_eggs = (
-            (production.good_eggs or 0) +
-            (production.damaged_eggs or 0) +
-            (production.small_eggs or 0) +
-            (production.double_yolk_eggs or 0) +
-            (production.soft_shell_eggs or 0) +
-            (production.shells or 0)
-        )
-        
-        hd_percentage = None
-        if total_eggs > 0 and production.opening_stock:
-            hd_percentage = (total_eggs / production.opening_stock) * 100
-        
-        er_ratio = None
-        if production.feed_kg and total_eggs > 0:
-            er_ratio = production.feed_kg / total_eggs
-        
-        db_record = ProductionRecord(
-            farm_id=farm.id,
-            pen_id=production.pen_id,
-            date=production.date,
-            age_days=production.age_days,
-            week_number=production.week_number,
-            opening_stock=production.opening_stock,
-            closing_stock=production.closing_stock,
-            mortality=production.mortality,
-            feed_kg=production.feed_kg,
-            good_eggs=production.good_eggs or 0,
-            damaged_eggs=production.damaged_eggs or 0,
-            small_eggs=production.small_eggs or 0,
-            double_yolk_eggs=production.double_yolk_eggs or 0,
-            soft_shell_eggs=production.soft_shell_eggs or 0,
-            shells=production.shells or 0,
-            broody_hen=production.broody_hen or 0,
-            culls=production.culls or 0,
-            staff_name=production.staff_name,
-            image_url=production.image_url,
-            total_eggs=total_eggs,
-            hd_percentage=hd_percentage,
-            er_ratio=er_ratio,
-            recorded_by_id=current_user.id,
-        )
-        db.add(db_record)
-        records.append(db_record)
-    
-    await db.commit()
-    for record in records:
-        await db.refresh(record)
-    
-    enriched = []
-    for rec in records:
-        enriched.append(await enrich_production_record(db, rec))
-    return enriched
+    return ProductionResponse(
+        id=record.id,
+        date=record.date,
+        pen_id=record.pen_id,
+        farm_id=record.farm_id,
+        age_days=record.age_days,
+        week_number=record.week_number,
+        opening_stock=record.opening_stock,
+        closing_stock=record.closing_stock,
+        mortality=record.mortality,
+        feed_kg=record.feed_kg,
+        good_eggs=record.good_eggs,
+        damaged_eggs=record.damaged_eggs,
+        small_eggs=record.small_eggs,
+        double_yolk_eggs=record.double_yolk_eggs,
+        soft_shell_eggs=record.soft_shell_eggs,
+        shells=record.shells,
+        broody_hen=record.broody_hen,
+        culls=record.culls,
+        staff_name=record.staff_name,
+        image_url=record.image_url,
+        total_eggs=record.total_eggs,
+        hd_percentage=record.hd_percentage,
+        er_ratio=record.er_ratio,
+        recorded_by_id=record.recorded_by_id,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        pen_name=pen.name,
+        block_name=pen.block_rel.name if pen.block_rel else None
+    )
 
-
-@router.put("/{record_id}", response_model=schema.ProductionResponse)
-async def update_production(
+@router.put("/{record_id}", response_model=ProductionResponse)
+async def update_production_record(
     record_id: int,
-    production: schema.ProductionUpdate,
+    data: ProductionUpdate,
     db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
-    _: Farm = Depends(require_active_subscription),
+    current_user: User = Depends(get_current_user),
+    farm: Farm = Depends(get_current_farm)
 ):
     """Update a production record"""
-    stmt = select(ProductionRecord).where(
-        ProductionRecord.id == record_id, ProductionRecord.farm_id == farm.id
+    result = await db.execute(
+        select(ProductionRecord).where(
+            ProductionRecord.id == record_id,
+            ProductionRecord.farm_id == farm.id
+        )
     )
-    result = await db.execute(stmt)
     record = result.scalar_one_or_none()
     if not record:
         raise HTTPException(status_code=404, detail="Production record not found")
     
-    update_dict = production.model_dump(exclude_unset=True)
-    for key, value in update_dict.items():
-        setattr(record, key, value)
-    
-    # Recalculate total_eggs, hd_percentage, er_ratio if egg fields changed
-    if any(k in update_dict for k in ["good_eggs", "damaged_eggs", "small_eggs", "double_yolk_eggs", "soft_shell_eggs", "shells"]):
-        total_eggs = (record.good_eggs or 0) + (record.damaged_eggs or 0) + (record.small_eggs or 0) + \
-                     (record.double_yolk_eggs or 0) + (record.soft_shell_eggs or 0) + (record.shells or 0)
-        record.total_eggs = total_eggs
-        if total_eggs > 0 and record.opening_stock:
-            record.hd_percentage = (total_eggs / record.opening_stock) * 100
-        if record.feed_kg and total_eggs > 0:
-            record.er_ratio = record.feed_kg / total_eggs
+    # Update fields
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(record, field, value)
     
     await db.commit()
     await db.refresh(record)
-    return await enrich_production_record(db, record)
-
+    
+    # Get pen name
+    pen_result = await db.execute(select(Pen).where(Pen.id == record.pen_id))
+    pen = pen_result.scalar_one_or_none()
+    
+    return ProductionResponse(
+        id=record.id,
+        date=record.date,
+        pen_id=record.pen_id,
+        farm_id=record.farm_id,
+        age_days=record.age_days,
+        week_number=record.week_number,
+        opening_stock=record.opening_stock,
+        closing_stock=record.closing_stock,
+        mortality=record.mortality,
+        feed_kg=record.feed_kg,
+        good_eggs=record.good_eggs or 0,
+        damaged_eggs=record.damaged_eggs or 0,
+        small_eggs=record.small_eggs or 0,
+        double_yolk_eggs=record.double_yolk_eggs or 0,
+        soft_shell_eggs=record.soft_shell_eggs or 0,
+        shells=record.shells or 0,
+        broody_hen=record.broody_hen or 0,
+        culls=record.culls or 0,
+        staff_name=record.staff_name,
+        image_url=record.image_url,
+        total_eggs=record.total_eggs,
+        hd_percentage=record.hd_percentage,
+        er_ratio=record.er_ratio,
+        recorded_by_id=record.recorded_by_id,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        pen_name=pen.name if pen else None,
+        block_name=pen.block_rel.name if pen and pen.block_rel else None
+    )
 
 @router.delete("/{record_id}")
-async def delete_production(
+async def delete_production_record(
     record_id: int,
     db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
-    _: Farm = Depends(require_active_subscription),
+    farm: Farm = Depends(get_current_farm)
 ):
     """Delete a production record"""
-    stmt = select(ProductionRecord).where(
-        ProductionRecord.id == record_id, ProductionRecord.farm_id == farm.id
+    result = await db.execute(
+        select(ProductionRecord).where(
+            ProductionRecord.id == record_id,
+            ProductionRecord.farm_id == farm.id
+        )
     )
-    result = await db.execute(stmt)
     record = result.scalar_one_or_none()
     if not record:
         raise HTTPException(status_code=404, detail="Production record not found")
+    
     await db.delete(record)
     await db.commit()
-    return {"status": "success", "message": "Production record deleted"}
+    
+    return {"message": "Production record deleted successfully"}
 
-
-# ---------- Additional Endpoints ----------
-@router.get("/previous", response_model=Optional[schema.ProductionResponse])
-async def get_previous_day_record(
-    pen_id: int = Query(...),
-    date: date = Query(...),
+@router.post("/batch", response_model=List[ProductionResponse])
+async def create_batch_production(
+    data: BatchProductionCreate,
     db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
-    _: Farm = Depends(require_active_subscription),
+    current_user: User = Depends(get_current_user),
+    farm: Farm = Depends(get_current_farm)
 ):
-    """Get the production record for the previous day of the given pen (used to auto-fill opening stock)."""
-    previous_date = date - timedelta(days=1)
-    stmt = (
-        select(ProductionRecord)
-        .where(
-            ProductionRecord.farm_id == farm.id,
-            ProductionRecord.pen_id == pen_id,
-            ProductionRecord.date == previous_date,
-        )
-        .order_by(desc(ProductionRecord.date))
+    """Create multiple production records in batch"""
+    # Verify pen belongs to farm
+    pen_result = await db.execute(
+        select(Pen).where(Pen.id == data.pen_id, Pen.farm_id == farm.id)
     )
-    result = await db.execute(stmt)
-    record = result.scalar_one_or_none()
-    if record:
-        await enrich_production_record(db, record)
-    return record
-
-
-@router.get("/latest-stock", response_model=List[schema.PenLatestProduction])
-async def get_latest_closing_stock(
-    db: AsyncSession = Depends(get_db),
-    farm: Farm = Depends(get_current_farm),
-    _: Farm = Depends(require_active_subscription),
-):
-    """Get the latest closing stock (current bird count) for each pen in the farm."""
-    subq = (
-        select(
-            ProductionRecord.pen_id,
-            func.max(ProductionRecord.date).label("max_date")
-        )
-        .where(ProductionRecord.farm_id == farm.id)
-        .group_by(ProductionRecord.pen_id)
-        .subquery()
+    pen = pen_result.scalar_one_or_none()
+    if not pen:
+        raise HTTPException(status_code=404, detail="Pen not found")
+    
+    # Calculate total eggs
+    total_eggs = (data.good_eggs or 0) + (data.damaged_eggs or 0) + (data.small_eggs or 0) + \
+                 (data.double_yolk_eggs or 0) + (data.soft_shell_eggs or 0) + (data.shells or 0)
+    
+    record = ProductionRecord(
+        date=data.date,
+        pen_id=data.pen_id,
+        farm_id=farm.id,
+        opening_stock=data.opening_stock,
+        closing_stock=data.closing_stock,
+        mortality=data.mortality,
+        feed_kg=data.feed_kg,
+        good_eggs=data.good_eggs or 0,
+        damaged_eggs=data.damaged_eggs or 0,
+        small_eggs=data.small_eggs or 0,
+        double_yolk_eggs=data.double_yolk_eggs or 0,
+        soft_shell_eggs=data.soft_shell_eggs or 0,
+        shells=data.shells or 0,
+        broody_hen=data.broody_hen or 0,
+        culls=data.culls or 0,
+        staff_name=data.staff_name,
+        image_url=data.image_url,
+        total_eggs=total_eggs,
+        recorded_by_id=current_user.id
     )
-    stmt = (
-        select(
-            ProductionRecord.pen_id,
-            ProductionRecord.closing_stock,
-            ProductionRecord.date.label("date")
-        )
-        .join(subq, and_(
-            ProductionRecord.pen_id == subq.c.pen_id,
-            ProductionRecord.date == subq.c.max_date
-        ))
-    )
-    result = await db.execute(stmt)
-    rows = result.all()
-    return [{"pen_id": r.pen_id, "closing_stock": r.closing_stock, "date": r.date} for r in rows]
+    
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+    
+    return [ProductionResponse(
+        id=record.id,
+        date=record.date,
+        pen_id=record.pen_id,
+        farm_id=record.farm_id,
+        age_days=record.age_days,
+        week_number=record.week_number,
+        opening_stock=record.opening_stock,
+        closing_stock=record.closing_stock,
+        mortality=record.mortality,
+        feed_kg=record.feed_kg,
+        good_eggs=record.good_eggs,
+        damaged_eggs=record.damaged_eggs,
+        small_eggs=record.small_eggs,
+        double_yolk_eggs=record.double_yolk_eggs,
+        soft_shell_eggs=record.soft_shell_eggs,
+        shells=record.shells,
+        broody_hen=record.broody_hen,
+        culls=record.culls,
+        staff_name=record.staff_name,
+        image_url=record.image_url,
+        total_eggs=record.total_eggs,
+        hd_percentage=record.hd_percentage,
+        er_ratio=record.er_ratio,
+        recorded_by_id=record.recorded_by_id,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        pen_name=pen.name,
+        block_name=pen.block_rel.name if pen.block_rel else None
+    )]
